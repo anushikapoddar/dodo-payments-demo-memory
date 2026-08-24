@@ -1,0 +1,429 @@
+<title>Merchant Risk Console</title>
+<style>
+:root{
+  /* Palette derived from dodopayments.com/brand + computed styles on the live site.
+     Signature lime #C6FE1E and forest #004F32 are theirs; text #00160D is their
+     actual body colour -- a green-black, not a grey. */
+  --brand-lime:#C6FE1E; --brand-forest:#004F32; --brand-green:#00D87D;
+  --brand-blue:#1264FF; --brand-pink:#EE46BC; --brand-purple:#7A5AF8;
+  --brand-yellow:#FFD84B; --brand-orange:#FF8B37; --brand-red:#E83439;
+
+  --paper:#FAFAFA; --surface:#FFFFFF; --surface-2:#F3F4F3; --surface-3:#E7E9E7;
+  --ink:#00160D; --ink-2:#39443E; --muted:#666666; --faint:#8B918D;
+  --rule:#E7E7E7; --rule-2:#D5D8D6;
+  --accent:#1264FF; --accent-soft:#E7F0FF; --accent-line:#B6CDFF;
+  --ok:#008750; --ok-bg:#E6FBF2;
+  --warn:#A85F12; --warn-bg:#FFF3EB;
+  --bad:#C2262B; --bad-bg:#FDECEC;
+  --serif:"ApfelGrotezk","Satoshi","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#04110A; --surface:#0B1A13; --surface-2:#12241B; --surface-3:#1C3327;
+  --ink:#E9F1EC; --ink-2:#C1D0C8; --muted:#95A59C; --faint:#75867C;
+  --rule:#1E3428; --rule-2:#2B4637;
+  --accent:#7FAAFF; --accent-soft:#0F2440; --accent-line:#2E4E80;
+  --ok:#00D87D; --ok-bg:#062A1B;
+  --warn:#FF8B37; --warn-bg:#2E1A0C;
+  --bad:#FF7A7F; --bad-bg:#2E1113;
+}}
+:root[data-theme="dark"]{
+  --paper:#04110A; --surface:#0B1A13; --surface-2:#12241B; --surface-3:#1C3327;
+  --ink:#E9F1EC; --ink-2:#C1D0C8; --muted:#95A59C; --faint:#75867C;
+  --rule:#1E3428; --rule-2:#2B4637;
+  --accent:#7FAAFF; --accent-soft:#0F2440; --accent-line:#2E4E80;
+  --ok:#00D87D; --ok-bg:#062A1B;
+  --warn:#FF8B37; --warn-bg:#2E1A0C;
+  --bad:#FF7A7F; --bad-bg:#2E1113;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:15.5px;line-height:1.58;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1000px;margin:0 auto;padding:0 28px 72px;}
+
+.mast{padding:52px 0 18px;border-bottom:1px solid var(--rule);}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,46px);line-height:1.06;
+  letter-spacing:-.015em;margin:12px 0 0;text-wrap:balance;}
+.dek{font-family:var(--serif);font-size:18px;line-height:1.48;color:var(--ink-2);max-width:62ch;margin:14px 0 0;text-wrap:pretty;}
+
+section{margin:38px 0 0;}
+h2{font-family:var(--serif);font-weight:400;font-size:23px;line-height:1.2;margin:0 0 10px;text-wrap:balance;}
+h2 .sn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);display:block;margin-bottom:6px;}
+h3{font-size:14.5px;font-weight:650;margin:26px 0 8px;}
+p{margin:0 0 12px;max-width:72ch;text-wrap:pretty;}
+ul{max-width:72ch;padding-left:19px;margin:0 0 12px}
+li{margin:0 0 6px}
+strong{font-weight:650}
+code{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 5px;border-radius:3px;color:var(--ink-2);}
+a{color:var(--accent)}
+
+.chip{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;
+  text-transform:uppercase;padding:2px 6px;border-radius:3px;vertical-align:1.5px}
+.c-ok{background:var(--ok-bg);color:var(--ok)} .c-bad{background:var(--bad-bg);color:var(--bad)}
+.c-warn{background:var(--warn-bg);color:var(--warn)} .c-acc{background:var(--accent-soft);color:var(--accent)}
+.c-mute{background:var(--surface-3);color:var(--muted)}
+
+.tbl{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--surface);margin:0 0 14px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:400;text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule-2);background:var(--surface-2);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.45}
+tr:last-child td{border-bottom:0}
+td.k{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap}
+
+.callout{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:6px;padding:16px 20px;margin:18px 0}
+.callout .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px}
+.callout p:last-child{margin-bottom:0}
+.callout.warn{border-color:var(--bad);background:var(--bad-bg)}
+.callout.warn .tag{color:var(--bad)}
+
+.sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px;margin:0 0 14px}
+.sw div{border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+.sw i{display:block;height:38px}
+.sw span{display:block;font-family:var(--mono);font-size:9.5px;padding:6px 8px;color:var(--muted);line-height:1.5}
+.sw span b{display:block;color:var(--ink);font-size:10px;letter-spacing:.06em}
+
+.strip{background:var(--surface);border-bottom:1px solid var(--rule);padding:9px 14px;
+  display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.strip .kpi{display:flex;flex-direction:column;gap:1px;min-width:0}
+.strip .kpi em{font-style:normal;font-family:var(--mono);font-size:8px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.strip .kpi b{font-family:var(--serif);font-size:16px;line-height:1.1;font-weight:400;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.strip .kpi b.ok{color:var(--ok)} .strip .kpi b.warn{color:var(--warn)} .strip .kpi b.bad{color:var(--bad)}
+.strip .kpi i{font-style:normal;font-size:9.5px;color:var(--muted);white-space:nowrap}
+.strip .kpi i.up{color:var(--ok)} .strip .kpi i.dn{color:var(--bad)}
+.strip .meter{height:3px;background:var(--surface-3);border-radius:2px;margin-top:3px;width:64px;overflow:hidden}
+.strip .meter s{display:block;height:100%;background:var(--ok);border-radius:2px;text-decoration:none}
+.strip .digest{margin-left:auto;font-size:10.5px;color:var(--accent);background:var(--accent-soft);
+  border:1px solid var(--accent-line);border-radius:14px;padding:4px 11px;white-space:nowrap}
+
+.feed{background:var(--surface-2);border-bottom:1px solid var(--rule);padding:11px 14px 12px}
+.feed .ttl{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:7px}
+.feed .ev{display:grid;grid-template-columns:52px 1fr;gap:9px;font-size:11.5px;padding:3px 0;color:var(--ink-2)}
+.feed .ev s{text-decoration:none;font-family:var(--mono);font-size:9px;color:var(--faint);padding-top:2px}
+
+/* ---------- wireframe mockups ---------- */
+figure{margin:20px 0 0}
+figcaption{font-size:13.5px;color:var(--muted);margin-top:11px;max-width:76ch;line-height:1.5}
+figcaption b{color:var(--ink-2);font-weight:650}
+.mock{border:1px solid var(--rule-2);border-radius:8px;overflow:hidden;background:var(--surface);
+  box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.mock .bar{background:var(--surface-2);border-bottom:1px solid var(--rule);padding:7px 12px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  display:flex;gap:7px;align-items:center}
+.mock .bar i{width:8px;height:8px;border-radius:50%;background:var(--rule-2);display:block}
+.mock .body{display:grid;min-height:300px}
+.m-chat{grid-template-columns:150px 1fr}
+.m-two{grid-template-columns:150px 1fr}
+.rail{background:var(--surface-2);border-right:1px solid var(--rule);padding:12px 10px;font-size:11.5px}
+.rail .nav{display:flex;flex-direction:column;gap:2px;margin-bottom:16px}
+.rail .nav b{padding:6px 9px;border-radius:5px;font-weight:600;font-size:12px;
+  background:var(--accent-soft);color:var(--accent)}
+.rail .nav span{padding:6px 9px;color:var(--muted);font-size:12px}
+.rail .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 7px;padding:0 9px}
+.rail .thr{padding:6px 9px;border-radius:5px;color:var(--ink-2);font-size:11.5px;line-height:1.35;margin-bottom:3px}
+.rail .thr.on{background:var(--surface-3)}
+.rail .thr em{display:block;font-style:normal;color:var(--faint);font-size:10px;margin-top:2px}
+.pane{padding:16px 18px;display:flex;flex-direction:column;gap:11px}
+
+.bub{border-radius:8px;padding:10px 13px;font-size:12.5px;line-height:1.5;max-width:88%}
+.bub.you{background:var(--surface-2);border:1px solid var(--rule);align-self:flex-end}
+.bub.ai{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent)}
+.bub .who{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:5px}
+
+.card{border:1px solid var(--rule-2);border-radius:7px;background:var(--surface-2);padding:12px 14px;font-size:12px}
+.card .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:9px}
+.card .nm{font-family:var(--serif);font-size:16px;line-height:1.1}
+.card .p{font-family:var(--serif);font-size:24px;line-height:1;color:var(--bad);font-variant-numeric:tabular-nums}
+.card .p em{font-style:normal;font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);display:block;text-align:right;margin-bottom:3px}
+.card .row{display:grid;grid-template-columns:14px 1fr;gap:8px;padding:4px 0;font-size:11.5px;color:var(--ink-2);
+  border-top:1px dotted var(--rule-2)}
+.card .row s{text-decoration:none;color:var(--bad);font-family:var(--mono);font-size:10px;padding-top:2px}
+.card .acts{display:flex;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule)}
+.card .acts b{font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;background:var(--accent);color:#fff}
+.card .acts span{font-size:11px;padding:5px 11px;border-radius:5px;border:1px solid var(--rule-2);color:var(--muted)}
+.card .acts span.red{border-color:var(--bad);color:var(--bad)}
+
+.cite{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:8px;
+  border-top:1px dotted var(--rule-2);padding-top:6px;line-height:1.6}
+.composer{margin-top:auto;border:1px solid var(--rule-2);border-radius:7px;background:var(--surface-2);
+  padding:9px 12px;font-size:12px;color:var(--faint);display:flex;justify-content:space-between;align-items:center}
+.composer b{font-size:11px;background:var(--accent);color:#fff;padding:4px 12px;border-radius:5px;font-weight:600}
+
+.lst{display:flex;flex-direction:column}
+.lst .it{display:grid;grid-template-columns:1fr auto;gap:12px;padding:10px 0;
+  border-bottom:1px solid var(--rule);font-size:12px;align-items:center}
+.lst .it:last-child{border-bottom:0}
+.lst .it .t{font-weight:600;font-size:12.5px}
+.lst .it .s{color:var(--muted);font-size:11px;margin-top:2px}
+.lst .hdr{font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);padding-bottom:7px;border-bottom:1px solid var(--rule-2)}
+
+.mem{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mem .m{border:1px solid var(--rule);border-radius:6px;padding:11px 13px;font-size:11.5px;background:var(--surface-2)}
+.mem .m .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:5px;display:flex;justify-content:space-between}
+.mem .m p{margin:0;font-size:11.5px;line-height:1.45;color:var(--ink-2)}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 14px}
+@media(max-width:700px){.split{grid-template-columns:1fr}.mem{grid-template-columns:1fr}}
+.box{border:1px solid var(--rule);border-radius:6px;background:var(--surface);padding:14px 16px}
+.box h4{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);font-weight:400;margin:0 0 9px}
+.box ul{margin:0;padding-left:17px;font-size:13.5px}
+.box.no{border-color:var(--bad)} .box.no h4{color:var(--bad)}
+.box.yes{border-color:var(--ok)} .box.yes h4{color:var(--ok)}
+
+footer{border-top:1px solid var(--rule);margin-top:44px;padding-top:16px;font-size:12.5px;color:var(--muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+/* ---------- shipped-console mockups (v4) ---------- */
+.m-app{grid-template-columns:132px 1fr}
+.side-m{background:var(--surface);border-right:1px solid var(--rule);padding:11px 9px;
+  display:flex;flex-direction:column;gap:2px}
+.side-m .brandrow{display:flex;align-items:center;gap:6px;padding:2px 6px 11px;
+  border-bottom:1px solid var(--rule);margin-bottom:9px}
+.side-m .brandrow s{width:14px;height:14px;border-radius:50%;background:var(--brand-lime);
+  display:block;text-decoration:none;flex:none}
+.side-m .brandrow b{font-family:var(--serif);font-size:13px;font-weight:400}
+.side-m a{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:5px;
+  color:var(--muted);font-size:11px;text-decoration:none}
+.side-m a s{width:9px;height:9px;border-radius:2px;background:var(--rule-2);
+  display:block;text-decoration:none;flex:none}
+.side-m a.on{background:#EFFBCF;color:#3F6606;font-weight:650}
+.side-m a.on s{background:var(--brand-lime)}
+.side-m a i{margin-left:auto;font-style:normal;font-family:var(--mono);font-size:8px;
+  background:var(--surface-3);color:var(--muted);border-radius:6px;padding:0 4px}
+.side-m .statusm{margin-top:auto;border:1px solid var(--rule);border-radius:6px;
+  padding:8px;font-size:9.5px;color:var(--muted);line-height:1.45}
+.side-m .statusm b{display:block;color:var(--ink);font-size:10px;margin-bottom:3px}
+.side-m .statusm u{text-decoration:none;color:var(--ok);font-weight:650}
+
+.appmain{padding:13px 15px;display:flex;flex-direction:column;gap:11px;background:var(--paper)}
+.topm{display:flex;align-items:center;gap:8px;margin:-13px -15px 2px;padding:8px 15px;
+  background:var(--surface);border-bottom:1px solid var(--rule)}
+.topm s{flex:1;max-width:230px;margin:0 auto;height:20px;border-radius:6px;
+  border:1px solid var(--rule-2);background:var(--surface-2);display:block;text-decoration:none}
+.greet{font-family:var(--serif);font-size:16px;line-height:1.15}
+.greet em{display:block;font-style:normal;font-family:var(--sans);font-size:10.5px;
+  color:var(--muted);margin-top:3px;max-width:52ch}
+.statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.statc{border:1px solid var(--rule);border-radius:7px;background:var(--surface);padding:9px 10px}
+.statc em{font-style:normal;font-size:9px;color:var(--muted);display:block}
+.statc b{font-family:var(--serif);font-size:19px;font-weight:400;line-height:1.15;
+  display:block;margin-top:3px}
+.statc i{font-style:normal;font-size:8.5px;color:var(--faint);display:block;margin-top:2px}
+.statc u{text-decoration:none;font-size:9px;font-weight:700;margin-left:4px}
+.statc u.up{color:var(--ok)} .statc u.dn{color:var(--bad)}
+.twocol{display:grid;grid-template-columns:1.3fr 1fr;gap:8px;align-items:start}
+.cardm{border:1px solid var(--rule);border-radius:7px;background:var(--surface);padding:10px 11px}
+.cardm .ttl{font-size:10.5px;font-weight:650;margin-bottom:8px;display:flex;
+  justify-content:space-between;gap:8px}
+.cardm .ttl span{font-weight:400;color:var(--faint);font-size:9px}
+.donutrow{display:flex;align-items:center;gap:12px}
+.donutrow svg{width:86px;height:86px;flex:none}
+.donutrow .lg{flex:1;display:flex;flex-direction:column;gap:5px;font-size:9.5px}
+.donutrow .lg div{display:flex;align-items:center;gap:6px}
+.donutrow .lg s{width:7px;height:7px;border-radius:50%;display:block;text-decoration:none;flex:none}
+.donutrow .lg u{margin-left:auto;text-decoration:none;color:var(--muted)}
+.listm{display:flex;flex-direction:column;font-size:10px}
+.listm div{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule)}
+.listm div:last-child{border-bottom:0}
+.listm s{width:19px;height:19px;border-radius:5px;background:var(--surface-3);flex:none;
+  display:grid;place-items:center;text-decoration:none;font-size:7.5px;color:var(--muted);font-weight:700}
+.listm b{font-weight:600;flex:1;min-width:0}
+.listm b em{display:block;font-style:normal;font-weight:400;color:var(--faint);font-size:8.5px}
+.listm i{font-style:normal;font-size:8px;padding:1px 5px;border-radius:5px;white-space:nowrap}
+.i-ok{background:var(--ok-bg);color:var(--ok)}
+.i-warn{background:var(--warn-bg);color:var(--warn)}
+.i-bad{background:var(--bad-bg);color:var(--bad)}
+.i-mute{background:var(--surface-3);color:var(--muted)}
+.gone{text-decoration:line-through;color:var(--faint)}
+@media(max-width:640px){
+  .statrow{grid-template-columns:repeat(2,1fr)}
+  .twocol{grid-template-columns:1fr}
+  .m-app{grid-template-columns:1fr}
+  .side-m{display:none}
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Dodo Payments &middot; Console design &middot; v4 &mdash; as built</div>
+  <h1>Merchant Risk Console</h1>
+  <p class="dek">The console is running. This is what shipped, and &mdash; more usefully &mdash; the four places where the design we wanted and the data we actually have disagreed, and what we did about it. Every number on every screen is computed by the engine. Nothing here is a placeholder.</p>
+</header>
+
+<section>
+  <h2><span class="sn">1</span>The shell</h2>
+  <p>A fixed left sidebar with eight destinations, a global search, and a status card that reports what the memory layer currently believes. The palette is Dodo&rsquo;s own: lime <code>#C6FE1E</code> on the active item and the primary action, forest-green-black <code>#00160D</code> for text.</p>
+  <p>Two things are deliberately <strong>absent</strong>. The <span class="gone">always-on summary bar</span> from v3 is gone &mdash; once an Overview screen existed, a strip repeating the same five numbers on every tab was duplication, and it made Chat and History harder to read for no gain. And there are no <span class="gone">Reports</span>, <span class="gone">Integrations</span> or <span class="gone">Settings</span> tabs: we had nothing real to put behind them, and an empty destination is worse than a missing one.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Destination</th><th>Answers</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Overview</td><td>How are we doing, and what changed</td></tr>
+        <tr><td class="k">Merchants</td><td>Every merchant memory has an opinion about, ranked by P(bad)</td></tr>
+        <tr><td class="k">Evaluations</td><td>The single worklist of everything needing a human</td></tr>
+        <tr><td class="k">Memory layer</td><td>What it knows, how it changed, whether it is getting better</td></tr>
+        <tr><td class="k">Graph explorer</td><td>What a merchant shares with the rest of the portfolio</td></tr>
+        <tr><td class="k">Alerts</td><td>Post-approval lifecycle and drift</td></tr>
+        <tr><td class="k">Chat</td><td>Ask, tell, correct &mdash; with evidence cited under every answer</td></tr>
+        <tr><td class="k">History</td><td>What was decided, and the rationale it learned from</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="sn">2</span>Overview</h2>
+  <figure>
+    <div class="mock">
+      <div class="bar"><i></i><i></i><i></i> &nbsp;Merchant Risk Console</div>
+      <div class="body m-app">
+        <div class="side-m">
+          <div class="brandrow"><s></s><b>Dodo</b></div>
+          <a class="on"><s></s>Overview</a>
+          <a><s></s>Merchants</a>
+          <a><s></s>Evaluations<i>11</i></a>
+          <a><s></s>Memory layer<i>18</i></a>
+          <a><s></s>Graph explorer</a>
+          <a><s></s>Alerts<i>25</i></a>
+          <a><s></s>Chat</a>
+          <a><s></s>History</a>
+          <div class="statusm"><b>Memory layer status</b>
+            <u>&bull; Active</u> &middot; 18 records<br>mean confidence 90.6%</div>
+        </div>
+        <div class="appmain">
+          <div class="topm"><s></s></div>
+          <div class="greet">Good afternoon, Anushika
+            <em>Your memory layer is continuously learning from every decision and reconciling what it already believed.</em></div>
+          <div class="statrow">
+            <div class="statc"><em>Total merchants</em><b>2,579<u class="dn">&darr;8%</u></b><i>approved and live</i></div>
+            <div class="statc"><em>High risk merchants</em><b>8</b><i>at or above the 13.8% operating point</i></div>
+            <div class="statc"><em>Decisions on file</em><b>3,984<u class="dn">&darr;6%</u></b><i>approvals and declines</i></div>
+            <div class="statc"><em>Memory confidence</em><b>90.6%</b><i>mean across 18 records in force</i></div>
+          </div>
+          <div class="twocol">
+            <div class="cardm"><div class="ttl">Merchant risk distribution <span>P(bad) across 2,579 live merchants</span></div>
+              <div class="donutrow">
+                <svg viewBox="0 0 120 120" role="img" aria-label="Risk distribution: 99% low risk">
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="var(--surface-3)" stroke-width="18"/>
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#17A05C" stroke-width="18"
+                    stroke-dasharray="286 3" transform="rotate(-90 60 60)"/>
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#D33A3F" stroke-width="18"
+                    stroke-dasharray="3 286" stroke-dashoffset="-286" transform="rotate(-90 60 60)"/>
+                  <text x="60" y="58" text-anchor="middle" font-size="16" fill="currentColor"
+                    font-family="Helvetica,Arial">2,579</text>
+                  <text x="60" y="71" text-anchor="middle" font-size="7" fill="var(--muted)">merchants</text>
+                </svg>
+                <div class="lg">
+                  <div><s style="background:#17A05C"></s>Low risk<u>2,554 &middot; 99%</u></div>
+                  <div><s style="background:#FFD84B"></s>Medium risk<u>17 &middot; 0.7%</u></div>
+                  <div><s style="background:#D2691E"></s>High risk<u>5 &middot; 0.2%</u></div>
+                  <div><s style="background:#D33A3F"></s>Very high risk<u>3 &middot; 0.1%</u></div>
+                </div>
+              </div>
+            </div>
+            <div class="cardm"><div class="ttl">Recent evaluations</div>
+              <div class="listm">
+                <div><s>F</s><b>Foxgloveloop<em>Digital goods</em></b><i class="i-warn">declined</i></div>
+                <div><s>ZC</s><b>Zephyr Cloud 6<em>AI product</em></b><i class="i-warn">declined</i></div>
+                <div><s>Q</s><b>Quillgrid<em>Digital goods</em></b><i class="i-ok">approved</i></div>
+                <div><s>OF</s><b>Oakfieldpeak Flow<em>SaaS</em></b><i class="i-ok">approved</i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>The Overview, as it renders.</b> Four figures, a risk distribution cut at the operating point rather than at arbitrary quintiles, and the recent decisions. The sidebar status card is the memory layer reporting on itself &mdash; how many records are in force and how sure it is of them.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="sn">3</span>Where the design and the data disagreed</h2>
+  <p>The design we worked from asked for four things the engine cannot honestly produce. Each was substituted rather than faked, because a demo that prints a confident number it cannot derive is the exact failure this project exists to prevent.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Asked for</th><th>Shipped</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Memory accuracy 94.6%</td><td>Memory confidence 90.6%</td><td>There is no accuracy metric. Mean confidence across the records currently in force is a real quantity the store can report.</td></tr>
+        <tr><td class="k">&uarr;12% vs last month</td><td>Deltas computed from decision dates</td><td>Two of the four stats have no prior period to compare against. They carry a note instead of an invented arrow &mdash; which is why one reads &minus;8%, not a flattering &uarr;.</td></tr>
+        <tr><td class="k">Memory score /100 per merchant</td><td>100 &minus; P(bad), labelled as such</td><td>A bare score invites the reader to think it means something independent. It is one number in two dresses, and the column says so.</td></tr>
+        <tr><td class="k">Retail, F&amp;B, Electronics, Apparel</td><td>Dodo&rsquo;s policy categories</td><td>SaaS, AI product, digital goods, templates &amp; plugins, ebooks. Generic retail verticals describe a business Dodo is not in.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <span class="tag">The rule that produced all four</span>
+    <p>Every figure on screen is traceable to something the engine computed. Where the data does not support the design, the design changes &mdash; not the number.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="sn">4</span>Merchants and the graph</h2>
+  <p><strong>Merchants</strong> is the full corpus, searchable and filterable by risk band, sorted by P(bad) descending so the merchants that can move sit at the top. A merchant that has not started transacting reads &ldquo;not live&rdquo;, not <code>$0</code>.</p>
+  <p><strong>Graph explorer</strong> draws the corroborating routes between an applicant and merchants we have already judged. Shared entities above degree 40 are treated as hubs and never carry corroboration &mdash; a shared payment processor is not evidence. That suppression is what keeps the graph from asserting that half the portfolio is related to the other half.</p>
+</section>
+
+<section>
+  <h2><span class="sn">5</span>Two bugs the build surfaced</h2>
+  <p>Seeding the corpus with Dodo&rsquo;s real, publicly-named customers is a test as much as a feature: a clean population that the engine must clear. It did not, twice &mdash; and both failures were the same mistake wearing different clothes. <strong>Prose similarity being mistaken for evidence.</strong></p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td class="k">A clean merchant pushed to 22%</td><td>A memory reading &ldquo;refund rates above 15 percent&hellip;&rdquo; carried no predicate, so it matched on text. Any pitch containing &ldquo;subscription&rdquo; and &ldquo;free trial&rdquo; fired it.</td><td>The memory now carries the predicate its own prose names: <code>refund_rate &ge; 0.15</code>. Behavioural lessons match on the observable, never on the wording.</td></tr>
+        <tr><td class="k">A clean merchant drawing a 3&times; likelihood ratio</td><td>Precedent search had no similarity floor. A neighbour matching at cosine 0.13 on <code>subscription</code>, <code>saas</code>, <code>github</code>, <code>email</code> counted as precedent.</td><td>A measured floor of 0.20. Genuine precedent in this corpus sits at 0.24 and above; below that the shared vocabulary is the corpus&rsquo;s, not the merchant&rsquo;s.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Both carry regression tests. The floor is documented with the measurement that produced it, not asserted as a constant.</p>
+</section>
+
+<section>
+  <h2><span class="sn">6</span>Real Dodo merchants in the corpus</h2>
+  <p>All <strong>17</strong> publicly-named Dodo customers are seeded: Mole, Vibe3D, Draftly, ReplyDaddy, CatDoes, Indilingo, Scira&nbsp;AI, PeerPush, IndieKit, Betide&nbsp;Studio, Healthify, Parakeet&nbsp;AI, MATIKS, GPAI, Cardboard, SurgeGrowth and Vaya. They give the demo a control population with real product descriptions and plausible operating shapes, against ~4,000 invented merchants.</p>
+  <div class="callout warn">
+    <span class="tag">Hard rule, enforced in code</span>
+    <p><strong>A real merchant never appears next to an adverse finding.</strong> Not flagged, not declined, not in a fraud ring, not graph-linked to a terminated merchant, never carrying a &ldquo;went bad&rdquo; label, never cited as adverse precedent.</p>
+    <p>These are real businesses. A screenshot showing one two hops from a piracy termination would be defamatory in effect regardless of intent. The corpus is randomised, so this is an assertion in <code>build()</code> plus six tests that fail the build &mdash; not a convention. Every fraud ring and every termination uses an invented name.</p>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted)">Product descriptions are factual, drawn from public sources. Operating figures &mdash; volume, transaction counts, refund rates &mdash; are illustrative, and the interface says so.</p>
+</section>
+
+<section>
+  <h2><span class="sn">7</span>Where Claude goes &mdash; and where it must not</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Claude does</th><th>Claude never</th></tr></thead>
+      <tbody>
+        <tr><td>Compose the answer from retrieved context</td><td class="no">Decide. The P(bad) arithmetic stays deterministic</td></tr>
+        <tr><td>Read an unstructured application into fields</td><td class="no">Invent evidence not present in the retrieval</td></tr>
+        <tr><td>Draft a candidate memory from a rationale</td><td class="no">Write to memory silently &mdash; reconciliation is explicit</td></tr>
+        <tr><td>Suggest a distilled pattern after an incident</td><td class="no">Promote a pattern past the replay gate</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The gate is the load-bearing part: a distilled pattern is promoted only if, replayed over the whole corpus, it catches more without flagging more. That delta is the anti-fragility claim expressed as a number rather than an adjective.</p>
+  <div class="callout">
+    <span class="tag">The API key</span>
+    <p>The key lives in an environment variable on the server. The browser calls our endpoint; our server calls Anthropic. A key in client-side code is readable through view-source and billable by whoever finds it. The console degrades to the deterministic path when no key is set &mdash; every screen above renders either way.</p>
+  </div>
+</section>
+
+<footer>
+  Anushika &middot; Dodo Payments &middot; 20 August 2026 &middot; v4, as built.
+  Synthetic corpus generated locally from seed 20260820; the application makes no network calls of its own.
+</footer>
+
+</div>

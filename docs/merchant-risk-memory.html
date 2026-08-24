@@ -1,0 +1,1231 @@
+<title>Merchant Risk Memory</title>
+<style>
+:root{
+  /* Dodo Payments brand — dodopayments.com/brand + live computed styles */
+  --brand-lime:#C6FE1E; --brand-forest:#004F32; --brand-green:#00D87D;
+  --brand-blue:#1264FF; --brand-pink:#EE46BC; --brand-purple:#7A5AF8;
+  --brand-yellow:#FFD84B; --brand-orange:#FF8B37; --brand-red:#E83439;
+
+  --paper:#FAFAFA; --surface:#FFFFFF; --surface-2:#F3F4F3; --surface-3:#E7E9E7;
+  --ink:#00160D; --ink-2:#39443E; --muted:#666666; --faint:#8B918D;
+  --rule:#E7E7E7; --rule-2:#D5D8D6;
+  --accent:#1264FF; --accent-soft:#E7F0FF; --accent-line:#B6CDFF;
+  --ok:#008750; --ok-bg:#E6FBF2;
+  --warn:#A85F12; --warn-bg:#FFF3EB;
+  --bad:#C2262B; --bad-bg:#FDECEC;
+  --sig:#C2262B; --sig-soft:#FDECEC;
+  --serif:"ApfelGrotezk","Satoshi","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#04110A; --surface:#0B1A13; --surface-2:#12241B; --surface-3:#1C3327;
+  --ink:#E9F1EC; --ink-2:#C1D0C8; --muted:#95A59C; --faint:#75867C;
+  --rule:#1E3428; --rule-2:#2B4637;
+  --accent:#7FAAFF; --accent-soft:#0F2440; --accent-line:#2E4E80;
+  --ok:#00D87D; --ok-bg:#062A1B;
+  --warn:#FF8B37; --warn-bg:#2E1A0C;
+  --bad:#FF7A7F; --bad-bg:#2E1113;
+  --sig:#FF7A7F; --sig-soft:#2E1113;
+}}
+:root[data-theme="dark"]{
+  --paper:#04110A; --surface:#0B1A13; --surface-2:#12241B; --surface-3:#1C3327;
+  --ink:#E9F1EC; --ink-2:#C1D0C8; --muted:#95A59C; --faint:#75867C;
+  --rule:#1E3428; --rule-2:#2B4637;
+  --accent:#7FAAFF; --accent-soft:#0F2440; --accent-line:#2E4E80;
+  --ok:#00D87D; --ok-bg:#062A1B;
+  --warn:#FF8B37; --warn-bg:#2E1A0C;
+  --bad:#FF7A7F; --bad-bg:#2E1113;
+  --sig:#FF7A7F; --sig-soft:#2E1113;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:15.5px;line-height:1.58;-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+/* ---------- shell ---------- */
+.shell{position:sticky;top:0;z-index:40;background:var(--surface);
+  border-bottom:1px solid var(--rule)}
+.shell .in{max-width:1000px;margin:0 auto;padding:0 28px}
+.shell .idbar{display:flex;align-items:baseline;gap:10px;padding:15px 0 11px;flex-wrap:wrap}
+.shell .mark{width:11px;height:11px;border-radius:3px;background:var(--brand-lime);
+  align-self:center;flex:none}
+.shell .nm{font-family:var(--serif);font-size:18px;line-height:1;letter-spacing:-.01em}
+.shell .sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint)}
+.shell .date{margin-left:auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint)}
+.tabs{display:flex;gap:2px;overflow-x:auto}
+.tabs button{appearance:none;background:none;border:0;border-bottom:2px solid transparent;
+  font:inherit;font-size:14px;color:var(--muted);padding:9px 14px 11px;cursor:pointer;
+  white-space:nowrap;display:flex;align-items:center;gap:8px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand-lime);font-weight:600}
+.tabs button em{font-style:normal;font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint)}
+.tabs button[aria-selected="true"] em{color:var(--accent)}
+.panel[hidden]{display:none}
+@media(prefers-reduced-motion:no-preference){.tabs button{transition:color .12s ease}}
+
+/* ================= Problem statement ================= */
+#tab-problem .wrap{max-width:860px;margin:0 auto;padding:0 28px 72px;}
+#tab-problem .mast{padding:52px 0 20px;border-bottom:1px solid var(--rule);}
+#tab-problem .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+#tab-problem h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,46px);line-height:1.06;
+  letter-spacing:-.015em;margin:12px 0 0;text-wrap:balance;}
+#tab-problem .dek{font-family:var(--serif);font-size:18px;line-height:1.48;color:var(--ink-2);max-width:60ch;margin:14px 0 0;text-wrap:pretty;}
+#tab-problem .metastrip{display:flex;flex-wrap:wrap;margin-top:26px;border-top:1px solid var(--rule);}
+#tab-problem .metastrip div{flex:1 1 130px;padding:10px 16px 10px 0;border-right:1px solid var(--rule);}
+#tab-problem .metastrip div:last-child{border-right:0}
+#tab-problem .metastrip dt{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 2px;}
+#tab-problem .metastrip dd{margin:0;font-size:13.5px;color:var(--ink-2);}
+#tab-problem section{margin:0 0 40px;}
+#tab-problem h2{font-family:var(--serif);font-weight:400;font-size:24px;line-height:1.2;margin:0 0 12px;text-wrap:balance;}
+#tab-problem h2 .sn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);display:block;margin-bottom:7px;}
+#tab-problem h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:400;margin:24px 0 9px;}
+#tab-problem p{margin:0 0 12px;max-width:70ch;text-wrap:pretty;}
+#tab-problem ul,#tab-problem ol{max-width:70ch;padding-left:19px;margin:0 0 12px;}
+#tab-problem li{margin:0 0 6px;}
+#tab-problem strong{font-weight:650}
+#tab-problem code{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 5px;border-radius:3px;color:var(--ink-2);}
+#tab-problem a{color:var(--accent)}
+#tab-problem .chip{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 6px;border-radius:3px;vertical-align:1.5px;}
+#tab-problem .c-ok{background:var(--ok-bg);color:var(--ok)}
+#tab-problem .c-bad{background:var(--bad-bg);color:var(--bad)}
+#tab-problem .c-warn{background:var(--warn-bg);color:var(--warn)}
+#tab-problem .c-neutral{background:var(--surface-2);color:var(--muted)}
+#tab-problem .statement{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:5px;padding:18px 22px;margin:18px 0;}
+#tab-problem .statement .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px;}
+#tab-problem .statement p:last-child{margin-bottom:0}
+#tab-problem .cases{display:grid;gap:12px;margin:0 0 12px;}
+#tab-problem .case{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--sig);
+  border-radius:4px;padding:14px 18px;}
+#tab-problem .case h5{font-family:var(--serif);font-weight:400;font-size:17px;margin:0 0 2px;}
+#tab-problem .case .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 8px;}
+#tab-problem .case p{font-size:14.5px;margin:0 0 8px;}
+#tab-problem .case p:last-child{margin:0}
+#tab-problem .case .pt{color:var(--ink-2);border-top:1px dotted var(--rule-2);padding-top:8px;}
+#tab-problem .case .pt b{color:var(--ink);font-weight:650}
+#tab-problem .tbl{overflow-x:auto;border:1px solid var(--rule);border-radius:5px;background:var(--surface);margin:0 0 14px;}
+#tab-problem table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:540px;}
+#tab-problem th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:400;text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule-2);background:var(--surface-2);white-space:nowrap;}
+#tab-problem td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.45;}
+#tab-problem tr:last-child td{border-bottom:0}
+#tab-problem td.k{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap;}
+#tab-problem figure{margin:18px 0 8px}
+#tab-problem figure svg{display:block;width:100%;height:auto}
+#tab-problem .figbox{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:16px 14px 10px;overflow-x:auto;}
+#tab-problem figcaption{font-size:13px;color:var(--muted);margin-top:10px;max-width:72ch;line-height:1.48}
+#tab-problem figcaption b{color:var(--ink-2);font-weight:650}
+#tab-problem .q{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule);align-items:start;}
+#tab-problem .q .qn{font-family:var(--mono);font-size:11.5px;color:var(--faint);padding-top:2px;}
+#tab-problem .q p{margin:0;font-size:14.5px;max-width:66ch}
+#tab-problem .q .why{font-size:13px;color:var(--muted);margin:3px 0 0}
+#tab-problem .q .own{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
+#tab-problem .assume{display:grid;grid-template-columns:44px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px;}
+#tab-problem .assume .id{font-family:var(--mono);font-size:11px;color:var(--accent);padding-top:2px}
+#tab-problem footer{border-top:1px solid var(--rule);margin-top:8px;padding-top:16px;font-size:12.5px;color:var(--muted);}
+#tab-problem footer p{max-width:74ch}
+#tab-problem .wrap{max-width:1000px;margin:0 auto;padding:0 28px 76px}
+#tab-problem .mast{padding:30px 0 16px}
+#tab-problem .mast h1{font-size:clamp(27px,3.6vw,34px)}
+#tab-problem .mast .dek{font-size:16.5px;max-width:66ch}
+#tab-problem footer{margin-top:40px}
+
+/* ================= Pipeline ================= */
+#tab-pipeline .wrap{max-width:1000px;margin:0 auto;padding:0 28px 72px;}
+#tab-pipeline .mast{padding:52px 0 18px;border-bottom:1px solid var(--rule);}
+#tab-pipeline .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+#tab-pipeline h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,46px);line-height:1.06;
+  letter-spacing:-.015em;margin:12px 0 0;text-wrap:balance;}
+#tab-pipeline .dek{font-family:var(--serif);font-size:18px;line-height:1.48;color:var(--ink-2);max-width:62ch;margin:14px 0 0;text-wrap:pretty;}
+#tab-pipeline section{margin:38px 0 0;}
+#tab-pipeline h2{font-family:var(--serif);font-weight:400;font-size:23px;line-height:1.2;margin:0 0 8px;text-wrap:balance;}
+#tab-pipeline h2 .sn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);display:block;margin-bottom:6px;}
+#tab-pipeline p{margin:0 0 12px;max-width:72ch;text-wrap:pretty;}
+#tab-pipeline strong{font-weight:650}
+#tab-pipeline code{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 5px;border-radius:3px;color:var(--ink-2);}
+#tab-pipeline a{color:var(--accent)}
+#tab-pipeline figure{margin:16px 0 0}
+#tab-pipeline figure svg{display:block;width:100%;height:auto}
+#tab-pipeline .figbox{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:18px 16px 12px;overflow-x:auto;}
+#tab-pipeline .figbox svg{min-width:640px}
+#tab-pipeline figcaption{font-size:13.5px;color:var(--muted);margin-top:11px;max-width:76ch;line-height:1.5}
+#tab-pipeline figcaption b{color:var(--ink-2);font-weight:650}
+#tab-pipeline .legend{display:flex;flex-wrap:wrap;gap:18px;margin:14px 0 0;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+#tab-pipeline .legend span{display:flex;align-items:center;gap:7px}
+#tab-pipeline .legend i{width:15px;height:3px;border-radius:2px;display:block}
+#tab-pipeline footer{border-top:1px solid var(--rule);margin-top:44px;padding-top:16px;font-size:12.5px;color:var(--muted);}
+#tab-pipeline .wrap{max-width:1000px;margin:0 auto;padding:0 28px 76px}
+#tab-pipeline .mast{padding:30px 0 16px}
+#tab-pipeline .mast h1{font-size:clamp(27px,3.6vw,34px)}
+#tab-pipeline .mast .dek{font-size:16.5px;max-width:66ch}
+#tab-pipeline footer{margin-top:40px}
+
+/* ================= Console design ================= */
+#tab-console .wrap{max-width:1000px;margin:0 auto;padding:0 28px 72px;}
+#tab-console .mast{padding:52px 0 18px;border-bottom:1px solid var(--rule);}
+#tab-console .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+#tab-console h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,46px);line-height:1.06;
+  letter-spacing:-.015em;margin:12px 0 0;text-wrap:balance;}
+#tab-console .dek{font-family:var(--serif);font-size:18px;line-height:1.48;color:var(--ink-2);max-width:62ch;margin:14px 0 0;text-wrap:pretty;}
+#tab-console section{margin:38px 0 0;}
+#tab-console h2{font-family:var(--serif);font-weight:400;font-size:23px;line-height:1.2;margin:0 0 10px;text-wrap:balance;}
+#tab-console h2 .sn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);display:block;margin-bottom:6px;}
+#tab-console h3{font-size:14.5px;font-weight:650;margin:26px 0 8px;}
+#tab-console p{margin:0 0 12px;max-width:72ch;text-wrap:pretty;}
+#tab-console ul{max-width:72ch;padding-left:19px;margin:0 0 12px}
+#tab-console li{margin:0 0 6px}
+#tab-console strong{font-weight:650}
+#tab-console code{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 5px;border-radius:3px;color:var(--ink-2);}
+#tab-console a{color:var(--accent)}
+#tab-console .chip{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;
+  text-transform:uppercase;padding:2px 6px;border-radius:3px;vertical-align:1.5px}
+#tab-console .c-ok{background:var(--ok-bg);color:var(--ok)}
+#tab-console .c-bad{background:var(--bad-bg);color:var(--bad)}
+#tab-console .c-warn{background:var(--warn-bg);color:var(--warn)}
+#tab-console .c-acc{background:var(--accent-soft);color:var(--accent)}
+#tab-console .c-mute{background:var(--surface-3);color:var(--muted)}
+#tab-console .tbl{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--surface);margin:0 0 14px}
+#tab-console table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+#tab-console th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:400;text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule-2);background:var(--surface-2);white-space:nowrap}
+#tab-console td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.45}
+#tab-console tr:last-child td{border-bottom:0}
+#tab-console td.k{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap}
+#tab-console .callout{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:6px;padding:16px 20px;margin:18px 0}
+#tab-console .callout .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px}
+#tab-console .callout p:last-child{margin-bottom:0}
+#tab-console .callout.warn{border-color:var(--bad);background:var(--bad-bg)}
+#tab-console .callout.warn .tag{color:var(--bad)}
+#tab-console .sw{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px;margin:0 0 14px}
+#tab-console .sw div{border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface)}
+#tab-console .sw i{display:block;height:38px}
+#tab-console .sw span{display:block;font-family:var(--mono);font-size:9.5px;padding:6px 8px;color:var(--muted);line-height:1.5}
+#tab-console .sw span b{display:block;color:var(--ink);font-size:10px;letter-spacing:.06em}
+#tab-console .strip{background:var(--surface);border-bottom:1px solid var(--rule);padding:9px 14px;
+  display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+#tab-console .strip .kpi{display:flex;flex-direction:column;gap:1px;min-width:0}
+#tab-console .strip .kpi em{font-style:normal;font-family:var(--mono);font-size:8px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);white-space:nowrap}
+#tab-console .strip .kpi b{font-family:var(--serif);font-size:16px;line-height:1.1;font-weight:400;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+#tab-console .strip .kpi b.ok{color:var(--ok)}
+#tab-console .strip .kpi b.warn{color:var(--warn)}
+#tab-console .strip .kpi b.bad{color:var(--bad)}
+#tab-console .strip .kpi i{font-style:normal;font-size:9.5px;color:var(--muted);white-space:nowrap}
+#tab-console .strip .kpi i.up{color:var(--ok)}
+#tab-console .strip .kpi i.dn{color:var(--bad)}
+#tab-console .strip .meter{height:3px;background:var(--surface-3);border-radius:2px;margin-top:3px;width:64px;overflow:hidden}
+#tab-console .strip .meter s{display:block;height:100%;background:var(--ok);border-radius:2px;text-decoration:none}
+#tab-console .strip .digest{margin-left:auto;font-size:10.5px;color:var(--accent);background:var(--accent-soft);
+  border:1px solid var(--accent-line);border-radius:14px;padding:4px 11px;white-space:nowrap}
+#tab-console .feed{background:var(--surface-2);border-bottom:1px solid var(--rule);padding:11px 14px 12px}
+#tab-console .feed .ttl{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:7px}
+#tab-console .feed .ev{display:grid;grid-template-columns:52px 1fr;gap:9px;font-size:11.5px;padding:3px 0;color:var(--ink-2)}
+#tab-console .feed .ev s{text-decoration:none;font-family:var(--mono);font-size:9px;color:var(--faint);padding-top:2px}
+#tab-console figure{margin:20px 0 0}
+#tab-console figcaption{font-size:13.5px;color:var(--muted);margin-top:11px;max-width:76ch;line-height:1.5}
+#tab-console figcaption b{color:var(--ink-2);font-weight:650}
+#tab-console .mock{border:1px solid var(--rule-2);border-radius:8px;overflow:hidden;background:var(--surface);
+  box-shadow:0 1px 3px rgba(0,0,0,.05)}
+#tab-console .mock .bar{background:var(--surface-2);border-bottom:1px solid var(--rule);padding:7px 12px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  display:flex;gap:7px;align-items:center}
+#tab-console .mock .bar i{width:8px;height:8px;border-radius:50%;background:var(--rule-2);display:block}
+#tab-console .mock .body{display:grid;min-height:300px}
+#tab-console .m-chat{grid-template-columns:150px 1fr}
+#tab-console .m-two{grid-template-columns:150px 1fr}
+#tab-console .rail{background:var(--surface-2);border-right:1px solid var(--rule);padding:12px 10px;font-size:11.5px}
+#tab-console .rail .nav{display:flex;flex-direction:column;gap:2px;margin-bottom:16px}
+#tab-console .rail .nav b{padding:6px 9px;border-radius:5px;font-weight:600;font-size:12px;
+  background:var(--accent-soft);color:var(--accent)}
+#tab-console .rail .nav span{padding:6px 9px;color:var(--muted);font-size:12px}
+#tab-console .rail .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 7px;padding:0 9px}
+#tab-console .rail .thr{padding:6px 9px;border-radius:5px;color:var(--ink-2);font-size:11.5px;line-height:1.35;margin-bottom:3px}
+#tab-console .rail .thr.on{background:var(--surface-3)}
+#tab-console .rail .thr em{display:block;font-style:normal;color:var(--faint);font-size:10px;margin-top:2px}
+#tab-console .pane{padding:16px 18px;display:flex;flex-direction:column;gap:11px}
+#tab-console .bub{border-radius:8px;padding:10px 13px;font-size:12.5px;line-height:1.5;max-width:88%}
+#tab-console .bub.you{background:var(--surface-2);border:1px solid var(--rule);align-self:flex-end}
+#tab-console .bub.ai{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--accent)}
+#tab-console .bub .who{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:5px}
+#tab-console .card{border:1px solid var(--rule-2);border-radius:7px;background:var(--surface-2);padding:12px 14px;font-size:12px}
+#tab-console .card .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:9px}
+#tab-console .card .nm{font-family:var(--serif);font-size:16px;line-height:1.1}
+#tab-console .card .p{font-family:var(--serif);font-size:24px;line-height:1;color:var(--bad);font-variant-numeric:tabular-nums}
+#tab-console .card .p em{font-style:normal;font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);display:block;text-align:right;margin-bottom:3px}
+#tab-console .card .row{display:grid;grid-template-columns:14px 1fr;gap:8px;padding:4px 0;font-size:11.5px;color:var(--ink-2);
+  border-top:1px dotted var(--rule-2)}
+#tab-console .card .row s{text-decoration:none;color:var(--bad);font-family:var(--mono);font-size:10px;padding-top:2px}
+#tab-console .card .acts{display:flex;gap:6px;margin-top:11px;padding-top:10px;border-top:1px solid var(--rule)}
+#tab-console .card .acts b{font-size:11px;font-weight:600;padding:5px 11px;border-radius:5px;background:var(--accent);color:#fff}
+#tab-console .card .acts span{font-size:11px;padding:5px 11px;border-radius:5px;border:1px solid var(--rule-2);color:var(--muted)}
+#tab-console .card .acts span.red{border-color:var(--bad);color:var(--bad)}
+#tab-console .cite{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:8px;
+  border-top:1px dotted var(--rule-2);padding-top:6px;line-height:1.6}
+#tab-console .composer{margin-top:auto;border:1px solid var(--rule-2);border-radius:7px;background:var(--surface-2);
+  padding:9px 12px;font-size:12px;color:var(--faint);display:flex;justify-content:space-between;align-items:center}
+#tab-console .composer b{font-size:11px;background:var(--accent);color:#fff;padding:4px 12px;border-radius:5px;font-weight:600}
+#tab-console .lst{display:flex;flex-direction:column}
+#tab-console .lst .it{display:grid;grid-template-columns:1fr auto;gap:12px;padding:10px 0;
+  border-bottom:1px solid var(--rule);font-size:12px;align-items:center}
+#tab-console .lst .it:last-child{border-bottom:0}
+#tab-console .lst .it .t{font-weight:600;font-size:12.5px}
+#tab-console .lst .it .s{color:var(--muted);font-size:11px;margin-top:2px}
+#tab-console .lst .hdr{font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--faint);padding-bottom:7px;border-bottom:1px solid var(--rule-2)}
+#tab-console .mem{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#tab-console .mem .m{border:1px solid var(--rule);border-radius:6px;padding:11px 13px;font-size:11.5px;background:var(--surface-2)}
+#tab-console .mem .m .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:5px;display:flex;justify-content:space-between}
+#tab-console .mem .m p{margin:0;font-size:11.5px;line-height:1.45;color:var(--ink-2)}
+#tab-console .split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 14px}
+@media(max-width:700px){#tab-console .split{grid-template-columns:1fr}#tab-console .mem{grid-template-columns:1fr}}
+#tab-console .box{border:1px solid var(--rule);border-radius:6px;background:var(--surface);padding:14px 16px}
+#tab-console .box h4{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);font-weight:400;margin:0 0 9px}
+#tab-console .box ul{margin:0;padding-left:17px;font-size:13.5px}
+#tab-console .box.no{border-color:var(--bad)}
+#tab-console .box.no h4{color:var(--bad)}
+#tab-console .box.yes{border-color:var(--ok)}
+#tab-console .box.yes h4{color:var(--ok)}
+#tab-console footer{border-top:1px solid var(--rule);margin-top:44px;padding-top:16px;font-size:12.5px;color:var(--muted)}
+#tab-console .m-app{grid-template-columns:132px 1fr}
+#tab-console .side-m{background:var(--surface);border-right:1px solid var(--rule);padding:11px 9px;
+  display:flex;flex-direction:column;gap:2px}
+#tab-console .side-m .brandrow{display:flex;align-items:center;gap:6px;padding:2px 6px 11px;
+  border-bottom:1px solid var(--rule);margin-bottom:9px}
+#tab-console .side-m .brandrow s{width:14px;height:14px;border-radius:50%;background:var(--brand-lime);
+  display:block;text-decoration:none;flex:none}
+#tab-console .side-m .brandrow b{font-family:var(--serif);font-size:13px;font-weight:400}
+#tab-console .side-m a{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:5px;
+  color:var(--muted);font-size:11px;text-decoration:none}
+#tab-console .side-m a s{width:9px;height:9px;border-radius:2px;background:var(--rule-2);
+  display:block;text-decoration:none;flex:none}
+#tab-console .side-m a.on{background:#EFFBCF;color:#3F6606;font-weight:650}
+#tab-console .side-m a.on s{background:var(--brand-lime)}
+#tab-console .side-m a i{margin-left:auto;font-style:normal;font-family:var(--mono);font-size:8px;
+  background:var(--surface-3);color:var(--muted);border-radius:6px;padding:0 4px}
+#tab-console .side-m .statusm{margin-top:auto;border:1px solid var(--rule);border-radius:6px;
+  padding:8px;font-size:9.5px;color:var(--muted);line-height:1.45}
+#tab-console .side-m .statusm b{display:block;color:var(--ink);font-size:10px;margin-bottom:3px}
+#tab-console .side-m .statusm u{text-decoration:none;color:var(--ok);font-weight:650}
+#tab-console .appmain{padding:13px 15px;display:flex;flex-direction:column;gap:11px;background:var(--paper)}
+#tab-console .topm{display:flex;align-items:center;gap:8px;margin:-13px -15px 2px;padding:8px 15px;
+  background:var(--surface);border-bottom:1px solid var(--rule)}
+#tab-console .topm s{flex:1;max-width:230px;margin:0 auto;height:20px;border-radius:6px;
+  border:1px solid var(--rule-2);background:var(--surface-2);display:block;text-decoration:none}
+#tab-console .greet{font-family:var(--serif);font-size:16px;line-height:1.15}
+#tab-console .greet em{display:block;font-style:normal;font-family:var(--sans);font-size:10.5px;
+  color:var(--muted);margin-top:3px;max-width:52ch}
+#tab-console .statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#tab-console .statc{border:1px solid var(--rule);border-radius:7px;background:var(--surface);padding:9px 10px}
+#tab-console .statc em{font-style:normal;font-size:9px;color:var(--muted);display:block}
+#tab-console .statc b{font-family:var(--serif);font-size:19px;font-weight:400;line-height:1.15;
+  display:block;margin-top:3px}
+#tab-console .statc i{font-style:normal;font-size:8.5px;color:var(--faint);display:block;margin-top:2px}
+#tab-console .statc u{text-decoration:none;font-size:9px;font-weight:700;margin-left:4px}
+#tab-console .statc u.up{color:var(--ok)}
+#tab-console .statc u.dn{color:var(--bad)}
+#tab-console .twocol{display:grid;grid-template-columns:1.3fr 1fr;gap:8px;align-items:start}
+#tab-console .cardm{border:1px solid var(--rule);border-radius:7px;background:var(--surface);padding:10px 11px}
+#tab-console .cardm .ttl{font-size:10.5px;font-weight:650;margin-bottom:8px;display:flex;
+  justify-content:space-between;gap:8px}
+#tab-console .cardm .ttl span{font-weight:400;color:var(--faint);font-size:9px}
+#tab-console .donutrow{display:flex;align-items:center;gap:12px}
+#tab-console .donutrow svg{width:86px;height:86px;flex:none}
+#tab-console .donutrow .lg{flex:1;display:flex;flex-direction:column;gap:5px;font-size:9.5px}
+#tab-console .donutrow .lg div{display:flex;align-items:center;gap:6px}
+#tab-console .donutrow .lg s{width:7px;height:7px;border-radius:50%;display:block;text-decoration:none;flex:none}
+#tab-console .donutrow .lg u{margin-left:auto;text-decoration:none;color:var(--muted)}
+#tab-console .listm{display:flex;flex-direction:column;font-size:10px}
+#tab-console .listm div{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--rule)}
+#tab-console .listm div:last-child{border-bottom:0}
+#tab-console .listm s{width:19px;height:19px;border-radius:5px;background:var(--surface-3);flex:none;
+  display:grid;place-items:center;text-decoration:none;font-size:7.5px;color:var(--muted);font-weight:700}
+#tab-console .listm b{font-weight:600;flex:1;min-width:0}
+#tab-console .listm b em{display:block;font-style:normal;font-weight:400;color:var(--faint);font-size:8.5px}
+#tab-console .listm i{font-style:normal;font-size:8px;padding:1px 5px;border-radius:5px;white-space:nowrap}
+#tab-console .i-ok{background:var(--ok-bg);color:var(--ok)}
+#tab-console .i-warn{background:var(--warn-bg);color:var(--warn)}
+#tab-console .i-bad{background:var(--bad-bg);color:var(--bad)}
+#tab-console .i-mute{background:var(--surface-3);color:var(--muted)}
+#tab-console .gone{text-decoration:line-through;color:var(--faint)}
+@media(max-width:640px){#tab-console .statrow{grid-template-columns:repeat(2,1fr)}#tab-console .twocol{grid-template-columns:1fr}#tab-console .m-app{grid-template-columns:1fr}#tab-console .side-m{display:none}}
+#tab-console .wrap{max-width:1000px;margin:0 auto;padding:0 28px 76px}
+#tab-console .mast{padding:30px 0 16px}
+#tab-console .mast h1{font-size:clamp(27px,3.6vw,34px)}
+#tab-console .mast .dek{font-size:16.5px;max-width:66ch}
+#tab-console footer{margin-top:40px}
+</style>
+
+<header class="shell">
+  <div class="in">
+    <div class="idbar">
+      <span class="mark"></span>
+      <span class="nm">Merchant Risk Memory</span>
+      <span class="sub">Dodo Payments</span>
+      <span class="date">20 Aug 2026 &middot; Anushika</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="btn-problem" aria-controls="tab-problem" aria-selected="true" data-tab="problem"><em>1</em>Problem statement</button>
+      <button role="tab" id="btn-pipeline" aria-controls="tab-pipeline" aria-selected="false" data-tab="pipeline"><em>2</em>Pipeline</button>
+      <button role="tab" id="btn-console" aria-controls="tab-console" aria-selected="false" data-tab="console"><em>3</em>Console design</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="panel" role="tabpanel" id="tab-problem" aria-labelledby="btn-problem">
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Dodo Payments &middot; Risk &amp; Compliance &middot; Problem definition v0.6</div>
+  <h1>Merchant Risk Memory</h1>
+  <p class="dek">Dodo is the merchant of record. Every merchant we admit borrows our licences and our liability. This defines what an anti-fragile memory layer is being asked to solve, and states every number we are assuming in order to start building.</p>
+  <dl class="metastrip">
+    <div><dt>Status</dt><dd>Draft for alignment</dd></div>
+    <div><dt>Author</dt><dd>Anushika</dd></div>
+    <div><dt>Numbers</dt><dd>Assumed &mdash; see §6</dd></div>
+    <div><dt>Date</dt><dd>20 Aug 2026</dd></div>
+  </dl>
+</header>
+
+<section style="padding-top:34px">
+  <h2><span class="sn">&sect; 1</span>Why this is a company-level risk</h2>
+  <p>As seller of record, Dodo is a party to every transaction &mdash; so the chargeback, the rights-holder claim and the regulator all arrive at Dodo, not at the merchant, who is by then unreachable. And because merchants transact under shared Dodo merchant identifiers, one bad actor's dispute ratio pollutes a pool every honest merchant depends on. <strong>The cost of a bad merchant is not bounded by their volume. It is bounded by our standing with our acquirers.</strong></p>
+  <p>The counterweight matters just as much. Our customer <em>is</em> the solo developer with a two-week-old domain, no company registration and possibly a Stripe ban in their history &mdash; indistinguishable from a fraudster on every naive feature. A system tuned only to avoid bad merchants converges on rejecting everyone, and an MoR that rejects everyone has no business.</p>
+  <p>So the objective is not &ldquo;catch fraud.&rdquo; It is: <strong>maximise approved legitimate volume within a bounded expected-loss and dispute-ratio budget</strong>, and get faster and more confident at the boundary over time.</p>
+
+  <div class="statement">
+    <span class="tag">Problem statement</span>
+    <p>Dodo assumes full seller-of-record liability but decides from <strong>isolated point-in-time evidence</strong>, using <strong>human judgement that does not persist</strong>, against <strong>outcomes that arrive months later and are never fed back</strong>. The same losses recur, and the reasoning behind a rejection lives in one analyst's head.</p>
+    <p><strong>We need to turn every merchant decision, incident and outcome into durable, connected, retrievable memory &mdash; so each new decision carries everything the platform has learned, and so adverse events measurably strengthen future decisions rather than merely being survived.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 2</span>The three failure modes</h2>
+  <p>If the built system doesn't visibly change the outcome of these, it hasn't solved the problem. Names are illustrative.</p>
+  <div class="cases">
+    <div class="case">
+      <h5>A &mdash; The rights they never had</h5>
+      <p class="lbl">Undisclosed illegality at intake &middot; the copyright case</p>
+      <p>An &ldquo;AI reading companion&rdquo; with a 40,000-book catalogue on a $9/month subscription. Clean site, working demo, <span class="chip c-warn">restricted but permitted</span> category. Approved in four minutes. On day 74 a publisher's counsel writes to Dodo, because Dodo is the seller on the receipt.</p>
+      <p class="pt"><b>Knowable at day 0:</b> no licences were ever requested, and the terms page was copied verbatim from a merchant we terminated in March.</p>
+    </div>
+    <div class="case">
+      <h5>B &mdash; The product that became a different product</h5>
+      <p class="lbl">Post-approval drift &middot; the misrepresentation case</p>
+      <p>Underwritten accurately as B2B meeting summarisation. At month five the team pivots the same domain and the same Dodo account to a <span class="chip c-bad">prohibited</span> category. Nothing in our records changes. Disputes triple.</p>
+      <p class="pt"><b>The structural gap:</b> underwriting is treated as an event, but merchant risk is a time series. The first signal we receive is the chargeback &mdash; the loss itself, arriving as the alert.</p>
+    </div>
+    <div class="case">
+      <h5>C &mdash; The same people, the fourth time</h5>
+      <p class="lbl">Recidivism and rings &middot; the network case</p>
+      <p>Terminated in March, reapplies in June as a new company, new domain, new director on paper. Read on its own terms the application is clean, and it is approved. Same payout account at one remove, same site template, same beneficial owner behind a nominee.</p>
+      <p class="pt"><b>Why no per-application model catches it:</b> the disqualifying fact is not a property of the applicant. It is a relationship to something we already know.</p>
+    </div>
+  </div>
+
+  <h4>2.1 &nbsp;The wider taxonomy &mdash; and two blind spots</h4>
+  <p>Those three came from worked examples, not a sweep. Read against acquirer-side fraud literature, Visa&rsquo;s monitoring rules and current FTC enforcement, they sit in only two of <strong>four postures</strong> a merchant can take &mdash; and the other two are not adversarial at all.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Posture</th><th>Categories</th><th>Signal it needs</th><th>Covered</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Deceiving us</td><td>Undisclosed illegality <strong>(A)</strong> &middot; recidivist rings <strong>(C)</strong> &middot; transaction laundering &middot; merchant identity fraud &middot; bust-out</td><td>Context graph + volume against underwritten forecast</td><td><span class="chip c-warn">partly</span></td></tr>
+        <tr><td class="k">Drifting from us</td><td>Product drift <strong>(B)</strong> &middot; deceptive billing and hard-to-cancel flows &middot; AI abuse controls decaying after launch</td><td>Content diff + refund and dispute velocity</td><td><span class="chip c-warn">partly</span></td></tr>
+        <tr><td class="k">Failing</td><td>Insolvency with prepaid annual subscriptions &middot; concentration</td><td>Unfulfilled prepaid balance tracked per merchant</td><td><span class="chip c-bad">no</span></td></tr>
+        <tr><td class="k">Being attacked</td><td>Account takeover &rarr; payout redirection &middot; card testing run through the merchant&rsquo;s checkout</td><td>Account behaviour &mdash; logins, payout changes, velocity</td><td><span class="chip c-bad">no</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><strong>The gaps are not random.</strong> Every one is a financial or behavioural signal rather than a content one, and everything §3 proposes is content-oriented &mdash; crawl the site, extract facts, diff the offering. That catches a merchant lying or drifting; it is blind to one that is failing or being attacked. The fix is one more input lane feeding the same graph, not a second system.</p>
+  <p>Two deserve naming out loud. <strong>Deceptive billing</strong> is probably the highest-<em>probability</em> risk in Dodo&rsquo;s actual customer base, because the merchant and the product are entirely real and only the cancellation flow offends &mdash; and the FTC has pursued a merchant of record directly on those grounds, with penalties assessed per affected customer. <strong>Insolvency</strong> is not fraud at all: an honest SaaS merchant goes under owing twelve months of prepaid service, and the refunds land on Dodo. No amount of fraud detection will ever surface it.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 3</span>Why a memory layer and a context graph</h2>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 880 400" role="img" aria-label="A context graph: a clean-looking applicant connects via shared domain infrastructure, payout account and director to two merchants Dodo has already terminated or flagged. An application-level model sees only the left half.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="arS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+        <rect x="6" y="34" width="452" height="338" rx="6" fill="none" stroke="currentColor" stroke-opacity=".28" stroke-dasharray="5 4"/>
+        <text x="14" y="24" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="currentColor" fill-opacity=".6">WHAT AN APPLICATION-LEVEL MODEL SEES</text>
+        <text x="874" y="24" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="var(--sig)">WHAT DECIDES THE CASE</text>
+
+        <g stroke="currentColor" stroke-opacity=".45" fill="none" marker-end="url(#ar)">
+          <path d="M190,190 C230,190 230,80 264,80"/><path d="M190,198 L264,196"/><path d="M190,208 C230,208 230,312 264,312"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="10" fill="currentColor" fill-opacity=".62" text-anchor="middle">
+          <text x="228" y="128">resolves to</text><text x="228" y="188">pays out to</text><text x="228" y="262">controlled by</text>
+        </g>
+        <g stroke="var(--sig)" stroke-width="1.6" fill="none" marker-end="url(#arS)">
+          <path d="M446,80 C532,80 532,106 614,106"/><path d="M446,192 C532,192 532,124 614,124"/><path d="M446,312 L614,310"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="10" fill="var(--sig)" text-anchor="middle">
+          <text x="530" y="84">same NS + site template</text><text x="530" y="154">same branch, holder pattern</text><text x="530" y="302">also director of</text>
+        </g>
+
+        <rect x="20" y="168" width="170" height="56" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity=".45"/>
+        <text x="105" y="191" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="currentColor">Lumen Labs</text>
+        <text x="105" y="208" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="currentColor" fill-opacity=".62">APPLICANT &middot; ALL FIELDS CLEAN</text>
+
+        <g fill="none" stroke="currentColor" stroke-opacity=".45">
+          <rect x="264" y="56" width="182" height="46" rx="4"/><rect x="264" y="172" width="182" height="46" rx="4"/><rect x="264" y="288" width="182" height="46" rx="4"/>
+        </g>
+        <g text-anchor="middle" fill="currentColor">
+          <text x="355" y="76" font-size="12.5">lumenlabs.app</text>
+          <text x="355" y="91" font-family="ui-monospace,Menlo,monospace" font-size="9" fill-opacity=".6">DOMAIN &middot; 11 DAYS OLD</text>
+          <text x="355" y="192" font-size="12.5">IBAN &bull;&bull;&bull;&bull; 4471</text>
+          <text x="355" y="207" font-family="ui-monospace,Menlo,monospace" font-size="9" fill-opacity=".6">PAYOUT ACCOUNT</text>
+          <text x="355" y="308" font-size="12.5">R. Menon</text>
+          <text x="355" y="323" font-family="ui-monospace,Menlo,monospace" font-size="9" fill-opacity=".6">DIRECTOR ON RECORD</text>
+        </g>
+
+        <g fill="none" stroke="var(--sig)" stroke-width="1.6">
+          <rect x="614" y="80" width="238" height="56" rx="4"/><rect x="614" y="282" width="238" height="56" rx="4"/>
+        </g>
+        <g text-anchor="middle" fill="var(--sig)">
+          <text x="733" y="103" font-family="Georgia,serif" font-size="14">Vellum Reader</text>
+          <text x="733" y="120" font-family="ui-monospace,Menlo,monospace" font-size="9.5">TERMINATED MAR &middot; RIGHTS CLAIM</text>
+          <text x="733" y="305" font-family="Georgia,serif" font-size="14">Bookly Cloud</text>
+          <text x="733" y="322" font-family="ui-monospace,Menlo,monospace" font-size="9.5">ACTIVE &middot; DISPUTE RATIO 4.1%</text>
+        </g>
+        <text x="733" y="362" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="currentColor" fill-opacity=".62">two hops from the applicant</text>
+      </svg>
+    </div>
+    <figcaption><b>Case C as a graph.</b> Nothing inside the dashed frame is disqualifying &mdash; which is exactly why per-application scoring approves it. The decision is carried entirely by the three red edges, each a join through an entity the applicant shares with a merchant we have already judged. Those edges must be stored objects, not something an analyst happens to remember.</figcaption>
+  </figure>
+
+  <ul>
+    <li><strong>The signal is relational.</strong> A classifier consuming an application as a feature vector structurally cannot represent Case C. A graph makes it a two-hop query.</li>
+    <li><strong>There will never be enough labels for supervised learning alone.</strong> Confirmed-bad merchants are rare events &mdash; dozens, not thousands. That is retrieval-and-precedent territory.</li>
+    <li><strong>Reasoning has to be defensible.</strong> &ldquo;The model scored you 0.83&rdquo; cannot be defended to a merchant or an acquirer. &ldquo;Three prior merchants with this fulfilment pattern and rights posture were terminated &mdash; here are the cases&rdquo; can.</li>
+    <li><strong>The threat is adversarial and non-stationary.</strong> A quarterly-retrained model always fights the last war; a memory that admits a case the day it is confirmed adapts in hours.</li>
+  </ul>
+
+  <h4>What we take from Mem0 &mdash; and what we don't</h4>
+  <p>Transferable: LLM-driven extraction of atomic facts, a hybrid vector-plus-graph store, and an explicit add / update / invalidate lifecycle so memory is reconciled rather than appended. Not transferable: the subject. Mem0 remembers preferences, where being wrong is a mild annoyance and there is no adversary. We would store adverse findings about named individuals who are actively trying to defeat the memory, under erasure rights. So every memory of ours carries <strong>provenance, confidence, decay, contestability and supersession</strong> &mdash; which is why I'd borrow the ideas but own the store.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 4</span>How the memory keeps learning</h2>
+  <p>Two update paths, running at very different speeds.</p>
+  <p><strong>Fast &mdash; every case, every day.</strong> Each case conversation and each correction an analyst makes is extracted into atomic facts and reconciled against what memory already holds: <em>add</em> if new, <em>update</em> if it refines something, <em>invalidate</em> if it contradicts something, <em>no-op</em> if already known. The next case reads the updated memory minutes later. There is no training step and nothing to schedule &mdash; the memory improves as a side effect of being used. This is the loop that matters day to day, and it is buildable with what we already have.</p>
+  <p><strong>Slow &mdash; on confirmed outcome.</strong> Terminations, rights claims and dispute breaches arrive 30&ndash;180 days after the decision they judge. They are few and authoritative, and they are what we score the memory against.</p>
+  <p>One risk to design for rather than debate: a memory that updates itself on every interaction also <em>drifts</em> on every interaction, and in risk work the drift direction is always toward paranoia. A fact written with false confidence propagates into every future decision and is much harder to spot than a bad one-off judgement. So the slow path carries a periodic health check.</p>
+  <div class="statement">
+    <span class="tag">Health check &mdash; and the anti-fragility claim</span>
+    <p>After ingesting confirmed outcomes, replay the historical decision set. Memory is healthy if it <strong>improves on cases it previously got wrong, without degrading cases it previously got right.</strong></p>
+    <p>Concretely: the Vellum Reader rights claim should, on replay, cause the system to have flagged Lumen Labs &mdash; and should <em>not</em> cause it to start declining the eleven legitimate e-book merchants. That is also the number that goes up when we feed the system a disaster, which is what makes &ldquo;anti-fragile&rdquo; a measurement rather than a word.</p>
+  </div>
+  <p><strong>What we are explicitly not building:</strong> a policy optimised against a reward signal by trial and error. Rewards here arrive months late, we never observe the counterfactual for merchants we decline, and &ldquo;exploration&rdquo; would mean deliberately approving merchants we believe are bad. Nothing in the loop above needs it &mdash; continuous memory update plus human feedback gets us the relearning behaviour without that machinery.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 5</span>Decisions taken</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Question</th><th>Decision</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Deliverable</td><td><strong>Demo / evaluation build</strong></td><td>Optimise for a visible, legible mechanism over production hardening.</td></tr>
+        <tr><td class="k">Data</td><td><strong>Synthetic corpus</strong></td><td>Authored merchant population with planted rings and drift cases &mdash; so we own the ground truth and the replay test is exactly measurable.</td></tr>
+        <tr><td class="k">Scope</td><td><strong>Onboarding + drift</strong></td><td>All three cases in scope. Buyer-side card fraud explicitly out &mdash; different system, sub-second budget.</td></tr>
+        <tr><td class="k">Authority</td><td><strong>Advisory copilot</strong></td><td>Evidence-first briefs; a human decides, corrects and confirms. Rationale and feedback capture is a feature, not an afterthought &mdash; it is the fast learning path in §4.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h4>Build sequence</h4>
+  <ol>
+    <li><strong>Author the corpus and resolve the graph.</strong> Measure recidivist-link recall on the planted rings &mdash; the cheapest proof the premise holds.</li>
+    <li><strong>The copilot.</strong> Assemble evidence, retrieve similar historical cases with outcomes, produce a brief &mdash; findings and precedent first, recommendation last, to counter automation bias. Capture the rationale.</li>
+    <li><strong>Drift.</strong> Re-observe merchant sites and fulfilment channels; alert when <code>observed_selling</code> diverges from <code>claims_to_sell</code> across a policy boundary.</li>
+    <li><strong>Continuous update, with a health check.</strong> Memory reconciles on every case and every piece of feedback. Periodically, replay confirmed outcomes over the historical decision set to confirm it is still improving without regressing &mdash; that chart is the anti-fragility claim.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 6</span>Working assumptions &mdash; every open question, answered</h2>
+  <p>Rather than block on founder input, every question is answered below with an assumed value so the build can proceed. <strong>All numbers in this section are assumed, not measured.</strong> They are chosen to be plausible for an MoR of Dodo&rsquo;s stage and stated explicitly so they can be corrected rather than debated in the abstract. Correct any of them and I will re-derive what depends on it.</p>
+
+  <h4>6.1 &nbsp;Assumed operating baseline</h4>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumed</th><th>Quantity</th><th>Assumed</th></tr></thead>
+      <tbody>
+        <tr><td>Applications, lifetime</td><td class="k">4,000</td><td>Annualised volume processed</td><td class="k">$150M</td></tr>
+        <tr><td>Applications, current rate</td><td class="k">15 / day</td><td>Approval rate</td><td class="k">65%</td></tr>
+        <tr><td>Approved merchants</td><td class="k">2,600</td><td>Touched by a human</td><td class="k">40%</td></tr>
+        <tr><td>Active merchants</td><td class="k">1,900</td><td>Median time to decision</td><td class="k">14 hours</td></tr>
+        <tr><td>Confirmed-bad, lifetime</td><td class="k">45 &nbsp;<span class="chip c-warn">1.7% of approvals</span></td><td>Loss from admission failure</td><td class="k">~$350k / yr</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The one that shapes the architecture is <strong>45 confirmed-bad merchants</strong>. That is far below the roughly 200 labelled outcomes supervised learning would need, which settles the design: retrieval and precedent, not a trained classifier. If the real figure turns out to be in the hundreds, §3 gains a scoring model alongside the graph &mdash; it does not replace it.</p>
+
+  <h4>6.2 &nbsp;The operating point, derived</h4>
+  <div class="statement">
+    <span class="tag">Assumed cost ratio &mdash; sets every threshold in the system</span>
+    <p><strong>Wrongly approving one bad merchant &asymp; $25,000</strong> &mdash; refunds and chargebacks on volume processed before termination, dispute fees, scheme fines, staff time. Tail cases (a rights claim, regulatory contact) run into six figures; this is the median, not the worst.</p>
+    <p><strong>Wrongly declining one good merchant &asymp; $4,000</strong> &mdash; roughly 24 months of lifetime margin on a small SaaS or indie account, plus a reputational cost that is real in a community where founders write publicly about being debanked.</p>
+    <p>That is a ratio of about <strong>6 : 1</strong>, which puts the indifference point at <strong>P(bad) &asymp; 14%</strong>. We should decline only when we believe there is better than a one-in-seven chance the merchant is bad &mdash; and be willing to accept roughly six wrongful declines to prevent one wrongful approval. <em>That is far less paranoid than intuition suggests</em>, and it is the single most useful output of writing these assumptions down.</p>
+  </div>
+
+  <h4>6.3 &nbsp;Every question, with its assumed answer</h4>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>#</th><th>Question</th><th>Assumed for the build</th><th>If it is wrong</th></tr></thead>
+      <tbody>
+        <tr><td class="k">1</td><td>Cost ratio, wrong decline vs. wrong approve</td><td><strong>6 : 1</strong>, threshold at P(bad) &asymp; 14%</td><td>Every threshold moves. Re-derive §6.2 and nothing else.</td></tr>
+        <tr><td class="k">2</td><td>May facts from one merchant decide another?</td><td><strong>Yes</strong> &mdash; legitimate interest in fraud prevention, covered by merchant terms</td><td>Fatal. A shared context graph is the project; per-merchant silos would end it.</td></tr>
+        <tr><td class="k">3</td><td>Accept the §4 replay test as the anti-fragility definition?</td><td><strong>Yes</strong></td><td>We keep the loop, lose the acceptance test, and &ldquo;anti-fragile&rdquo; stays unmeasured.</td></tr>
+        <tr><td class="k">4</td><td>Shared MIDs? Current dispute ratio?</td><td><strong>Shared.</strong> Portfolio VAMP ratio &asymp; <strong>0.40%</strong> &mdash; under the 0.50% acquirer line, thin headroom, no active remediation</td><td>If above 0.50%, this stops being a build project and becomes an incident.</td></tr>
+        <tr><td class="k">5</td><td>Labelled historical outcomes?</td><td><strong>45</strong>, reasons recorded informally only</td><td>Above ~200, add a scoring model beside the graph.</td></tr>
+        <tr><td class="k">6</td><td>Will analysts write rationales?</td><td><strong>Yes, if it is one required field in the tool they already use</strong> &mdash; no, if it is a separate system</td><td>Design constraint, not a risk: rationale capture ships inside the decision action or not at all.</td></tr>
+        <tr><td class="k">7</td><td>What counts as ground truth?</td><td>Terminations split <strong>~55% policy, ~30% fraud, ~15% commercial</strong>. Only the 30% are fraud labels</td><td>Label with reason codes regardless &mdash; a single &ldquo;bad&rdquo; flag teaches the wrong lesson either way.</td></tr>
+        <tr><td class="k">8</td><td>Retention of founder identity for recidivism?</td><td><strong>7 years</strong> on adverse findings; erasure honoured for non-adverse records, refused for adverse</td><td>A shorter window blinds us to Case C beyond it. Set it before the first person node is written.</td></tr>
+        <tr><td class="k">9</td><td>Do we owe a declined merchant a reason?</td><td><strong>Category-level reason, never the specific signal</strong>, with an appeal channel</td><td>If specificity is legally required, expect faster adversarial adaptation and shorter signal half-life.</td></tr>
+        <tr><td class="k">10</td><td>Is country of incorporation an acceptable input?</td><td><strong>Yes, but never sole-factor</strong>, with approval rate by region as a standing metric</td><td>If disallowed, drop the feature; the graph carries most of that signal anyway.</td></tr>
+        <tr><td class="k">11</td><td>Ranked losses over the last 12 months</td><td>Deceptive billing <strong>35%</strong> &middot; drift <strong>20%</strong> &middot; illegality/IP <strong>15%</strong> &middot; insolvency <strong>12%</strong> &middot; rings <strong>8%</strong> &middot; laundering <strong>5%</strong> &middot; ATO <strong>3%</strong> &middot; card testing <strong>2%</strong></td><td><span class="chip c-bad">softest assumption here</span> Real data almost certainly reorders this, and the build order follows it.</td></tr>
+        <tr><td class="k">12</td><td>Unfulfilled prepaid balance tracked?</td><td><strong>No, and no reserves held.</strong> Estimated exposure <strong>~$22M</strong> &mdash; about 15% of annual volume</td><td>If reserves already exist, insolvency drops down the priority list.</td></tr>
+        <tr><td class="k">13</td><td>Cancellation flows reviewed at underwriting?</td><td><strong>No</strong>, and not re-checked afterwards</td><td>If already reviewed, the largest assumed loss category is already controlled.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Two of these carry most of the risk of being wrong. <strong>Number 11</strong> is close to a guess &mdash; it is ordered by what the literature says is dangerous, not by Dodo&rsquo;s books, and one afternoon with the real numbers would beat all of my reasoning. <strong>Number 12</strong> produces the largest figure in this document from the thinnest evidence: if roughly a third of merchants sell annual plans and are on average halfway through their term, the unfulfilled obligation Dodo would inherit on their failure is around $22M. Even at half that, it dwarfs the assumed $350k annual fraud loss &mdash; which suggests the biggest exposure here may not be fraud at all.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 7</span>Structural assumptions &mdash; correct these first</h2>
+  <div class="assume"><span class="id">A-1</span><div>Merchants transact under Dodo's MIDs, so dispute ratios aggregate at platform level. See question 4.</div></div>
+  <div class="assume"><span class="id">A-2</span><div>Onboarding is substantially manual today, and rationales are not captured in structured form.</div></div>
+  <div class="assume"><span class="id">A-3</span><div>Dodo's published merchant acceptance policy &mdash; accepted, restricted, prohibited &mdash; is the authoritative taxonomy we classify against.</div></div>
+  <div class="assume"><span class="id">A-4</span><div>Continuously crawling merchant sites and public fulfilment channels is contractually acceptable. Drift detection is not buildable otherwise.</div></div>
+  <div class="assume"><span class="id">A-5</span><div>Seconds-to-minutes decision latency is acceptable; this is not an inline checkout path.</div></div>
+  <div class="assume"><span class="id">A-6</span><div>Transaction, refund, payout and login telemetry can be fed into the same graph. §2.1 shows half the risk taxonomy is invisible without it.</div></div>
+</section>
+
+<footer>
+  <p>Diagrams: <a href="https://claude.ai/code/artifact/2cb36867-64f4-4800-b371-189d48876f2a">Merchant Risk Pipeline</a> &mdash; the broken loop, the case timeline, the end-to-end flow and the memory update lifecycle. Sources: <a href="https://docs.dodopayments.com/miscellaneous/merchant-acceptance">Dodo Payments Merchant Acceptance Policy</a> &middot; <a href="https://docs.mem0.ai/cookbooks/essentials/choosing-memory-architecture-vector-vs-graph">Mem0 &mdash; vector vs. graph memory</a>. Case and merchant names in §2 and §3 are illustrative composites.</p>
+</footer>
+
+</div>
+</div>
+<div class="panel" role="tabpanel" id="tab-pipeline" aria-labelledby="btn-pipeline" hidden>
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Dodo Payments &middot; Risk &amp; Compliance &middot; Companion to the problem statement</div>
+  <h1>Merchant Risk Pipeline</h1>
+  <p class="dek">Five pictures: the loop that is broken today, the three ways merchants go wrong and how long each takes to surface, the end-to-end system we are proposing to build, how the memory keeps updating itself once it is running, and the wider risk taxonomy that shows what the pipeline still cannot see.</p>
+</header>
+
+<!-- ============ FIG 1 ============ -->
+<section>
+  <h2><span class="sn">Figure 1</span>The problem: a loop that never closes</h2>
+  <p>Dodo decides, the merchant trades, and months later an outcome arrives &mdash; a chargeback, a rights claim, a termination. That outcome never travels back to the decision that caused it. The reasoning behind the original call was never written down, so there is nothing for it to travel back <em>to</em>.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 215" role="img" aria-label="Two panels. Today: application, decision, merchant and outcome form a chain, and the return path from outcome back to decision is severed and labelled never returns. Proposed: the same chain, with the return path running through a memory store and a replay gate.">
+        <defs>
+          <marker id="f1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="f1s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+          <marker id="f1k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+        </defs>
+
+        <rect x="10" y="14" width="477" height="192" rx="6" fill="none" stroke="currentColor" stroke-opacity=".2"/>
+        <rect x="513" y="14" width="477" height="192" rx="6" fill="none" stroke="var(--accent)" stroke-opacity=".45"/>
+        <text x="28" y="40" font-family="ui-monospace,Menlo,monospace" font-size="10.5" letter-spacing="1.4" fill="var(--sig)">TODAY</text>
+        <text x="531" y="40" font-family="ui-monospace,Menlo,monospace" font-size="10.5" letter-spacing="1.4" fill="var(--accent)">PROPOSED</text>
+
+        <!-- LEFT -->
+        <g fill="none" stroke="currentColor" stroke-opacity=".45">
+          <rect x="40" y="58" width="110" height="44" rx="4"/><rect x="190" y="58" width="110" height="44" rx="4"/><rect x="340" y="58" width="110" height="44" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="95" y="79">Decision</text><text x="245" y="79">Merchant</text><text x="395" y="79">Outcome</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="95" y="93">NO RATIONALE KEPT</text><text x="245" y="93">TRADES</text><text x="395" y="93">CHARGEBACK, CLAIM</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".45" fill="none" marker-end="url(#f1a)">
+          <path d="M150,80 L184,80"/><path d="M300,80 L334,80"/>
+        </g>
+        <path d="M395,102 L395,152 L95,152 L95,108" fill="none" stroke="var(--sig)" stroke-opacity=".8" stroke-dasharray="5 4"/>
+        <g stroke="var(--sig)" stroke-width="1.8"><path d="M238,144 L252,160"/><path d="M252,144 L238,160"/></g>
+        <text x="245" y="182" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="var(--sig)">NEVER RETURNS</text>
+
+        <!-- RIGHT -->
+        <g fill="none" stroke="currentColor" stroke-opacity=".45">
+          <rect x="543" y="58" width="110" height="44" rx="4"/><rect x="693" y="58" width="110" height="44" rx="4"/><rect x="843" y="58" width="110" height="44" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="598" y="79">Decision</text><text x="748" y="79">Merchant</text><text x="898" y="79">Outcome</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="598" y="93">+ RATIONALE</text><text x="748" y="93">MONITORED</text><text x="898" y="93">CHARGEBACK, CLAIM</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".45" fill="none" marker-end="url(#f1a)">
+          <path d="M653,80 L687,80"/><path d="M803,80 L837,80"/>
+        </g>
+        <rect x="668" y="138" width="160" height="42" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".7"/>
+        <text x="748" y="155" text-anchor="middle" font-size="12" fill="var(--accent)">Memory + replay gate</text>
+        <text x="748" y="169" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="var(--accent)">PROMOTE IF IT IMPROVES</text>
+        <path d="M898,102 L898,159 L836,159" fill="none" stroke="var(--accent)" marker-end="url(#f1k)"/>
+        <path d="M668,159 L598,159 L598,108" fill="none" stroke="var(--accent)" marker-end="url(#f1k)"/>
+      </svg>
+    </div>
+    <figcaption><b>The single structural change.</b> Everything else in this document follows from closing that return path. The gate matters as much as the loop: without it, every incident makes the system more paranoid and the approval rate quietly collapses &mdash; which for a merchant-of-record is its own kind of failure.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 2 ============ -->
+<section>
+  <h2><span class="sn">Figure 2</span>The three cases, and how long each stays invisible</h2>
+  <p>Two of the three are fully knowable on day one &mdash; the evidence exists at intake, and we simply do not look for it or cannot retrieve it. The third is not knowable at intake at any price, because the merchant was honest when we underwrote them. That distinction decides where engineering effort goes.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 400" role="img" aria-label="A timeline in days for three merchant failure cases. Case A rights: risk present at day 0, detected day 74 today, detectable at day 0 with memory. Case B drift: risk begins day 150, detected day 180 today, day 152 with monitoring. Case C recidivism: risk present at day 0, often never detected today, detectable at day 0 with the graph.">
+        <defs>
+          <marker id="f2s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+
+        <text x="20" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.2" fill="var(--sig)">TODAY &mdash; EXPOSURE WINDOW</text>
+        <text x="330" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.2" fill="var(--accent)">WITH THE MEMORY LAYER</text>
+
+        <!-- track lines -->
+        <g stroke="currentColor" stroke-opacity=".16">
+          <line x1="120" y1="82" x2="950" y2="82"/><line x1="120" y1="106" x2="950" y2="106"/>
+          <line x1="120" y1="182" x2="950" y2="182"/><line x1="120" y1="206" x2="950" y2="206"/>
+          <line x1="120" y1="282" x2="950" y2="282"/><line x1="120" y1="306" x2="950" y2="306"/>
+        </g>
+
+        <!-- CASE A -->
+        <text x="20" y="66" font-size="12.5" fill="currentColor">Case A &mdash; rights</text>
+        <text x="20" y="80" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">PIRATED CATALOGUE</text>
+        <rect x="120" y="77" width="307" height="10" rx="2" fill="var(--sig)" fill-opacity=".26"/>
+        <rect x="118" y="72" width="4" height="20" fill="var(--sig)"/>
+        <circle cx="427" cy="82" r="5" fill="none" stroke="var(--sig)" stroke-width="1.8"/>
+        <text x="437" y="86" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)">DAY 74 &mdash; PUBLISHER&rsquo;S COUNSEL WRITES TO DODO</text>
+        <circle cx="120" cy="106" r="5" fill="var(--accent)"/>
+        <text x="132" y="110" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">DAY 0 &mdash; NO LICENCES ON FILE; TERMS PAGE MATCHES A TERMINATED MERCHANT</text>
+
+        <!-- CASE B -->
+        <text x="20" y="166" font-size="12.5" fill="currentColor">Case B &mdash; drift</text>
+        <text x="20" y="180" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">PIVOT AFTER APPROVAL</text>
+        <rect x="742" y="177" width="125" height="10" rx="2" fill="var(--sig)" fill-opacity=".26"/>
+        <rect x="740" y="172" width="4" height="20" fill="var(--sig)"/>
+        <circle cx="867" cy="182" r="5" fill="none" stroke="var(--sig)" stroke-width="1.8"/>
+        <text x="877" y="186" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)" transform="translate(0,-16)">DAY 180 &mdash; THE CHARGEBACK IS THE ALERT</text>
+        <circle cx="751" cy="206" r="5" fill="var(--accent)"/>
+        <text x="741" y="210" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">DAY 152 &mdash; SITE DIFF CROSSES A POLICY BOUNDARY</text>
+        <text x="746" y="238" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="currentColor" fill-opacity=".5">RISK BEGINS HERE &mdash; NOT KNOWABLE AT INTAKE</text>
+
+        <!-- CASE C -->
+        <text x="20" y="266" font-size="12.5" fill="currentColor">Case C &mdash; ring</text>
+        <text x="20" y="280" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">TERMINATED, REAPPLIED</text>
+        <rect x="120" y="277" width="810" height="10" rx="2" fill="var(--sig)" fill-opacity=".26"/>
+        <rect x="118" y="272" width="4" height="20" fill="var(--sig)"/>
+        <path d="M930,282 L960,282" stroke="var(--sig)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#f2s)" fill="none"/>
+        <text x="640" y="268" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)">OFTEN NEVER DETECTED &mdash; UNTIL THE NEXT TERMINATION</text>
+        <circle cx="120" cy="306" r="5" fill="var(--accent)"/>
+        <text x="132" y="310" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">DAY 0 &mdash; TWO HOPS TO A MERCHANT WE ALREADY TERMINATED</text>
+
+        <!-- axis -->
+        <line x1="120" y1="348" x2="950" y2="348" stroke="currentColor" stroke-opacity=".35"/>
+        <g stroke="currentColor" stroke-opacity=".35">
+          <line x1="120" y1="348" x2="120" y2="354"/><line x1="244" y1="348" x2="244" y2="354"/>
+          <line x1="369" y1="348" x2="369" y2="354"/><line x1="493" y1="348" x2="493" y2="354"/>
+          <line x1="618" y1="348" x2="618" y2="354"/><line x1="742" y1="348" x2="742" y2="354"/>
+          <line x1="867" y1="348" x2="867" y2="354"/>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="currentColor" fill-opacity=".55">
+          <text x="120" y="370">DAY 0</text><text x="244" y="370">30</text><text x="369" y="370">60</text>
+          <text x="493" y="370">90</text><text x="618" y="370">120</text><text x="742" y="370">150</text><text x="867" y="370">180</text>
+        </g>
+        <text x="120" y="390" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="currentColor" fill-opacity=".45">UNDERWRITING DECISION</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--sig);opacity:.4"></i>Exposure window today</span>
+      <span><i style="background:var(--sig)"></i>Risk begins</span>
+      <span><i style="background:var(--accent);border-radius:50%;width:9px;height:9px"></i>Detection with the memory layer</span>
+    </div>
+    <figcaption><b>The shaded bars are the money.</b> Cases A and C collapse to day zero because the evidence already exists at intake &mdash; retrieval and graph traversal, not prediction. Case B cannot collapse to zero at any price, because the merchant was telling the truth when we underwrote them; the win there is 28 days of lead time, bought by continuously reconciling what they claim to sell against what they are observed selling.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 3 ============ -->
+<section>
+  <h2><span class="sn">Figure 3</span>The end-to-end pipeline</h2>
+  <p>Three loops run at different speeds against one shared memory. <strong>Intake</strong> runs per application in seconds to minutes. <strong>Lifecycle</strong> runs continuously per active merchant. <strong>Learning</strong> runs at two speeds &mdash; feedback from the case in front of you writes to memory immediately, while confirmed outcomes arrive months later. The memory layer in the middle is what makes them one system rather than three tools.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 620" role="img" aria-label="An end-to-end pipeline. An intake row runs from application through evidence collection, fact extraction, entity resolution, precedent retrieval and case brief. It writes to and reads from a central memory layer holding the context graph, case memory and policy taxonomy. Below, a lifecycle row re-observes merchants and diffs claimed against observed offerings, raising drift alerts. A learning row turns confirmed outcomes into candidate memories that pass a replay gate before promotion.">
+        <defs>
+          <marker id="f3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="f3k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+          <marker id="f3s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+
+        <!-- ROW A : INTAKE -->
+        <text x="20" y="42" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">1 &middot; INTAKE &mdash; PER APPLICATION, SECONDS TO MINUTES</text>
+        <g fill="var(--surface)" stroke="currentColor" stroke-opacity=".42">
+          <rect x="20" y="58" width="140" height="54" rx="4"/><rect x="178" y="58" width="140" height="54" rx="4"/>
+          <rect x="336" y="58" width="140" height="54" rx="4"/><rect x="494" y="58" width="140" height="54" rx="4"/>
+          <rect x="652" y="58" width="140" height="54" rx="4"/><rect x="810" y="58" width="140" height="54" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="90" y="82">Application</text><text x="248" y="82">Evidence</text><text x="406" y="82">Fact extraction</text>
+          <text x="564" y="82">Entity resolution</text><text x="722" y="82">Precedent</text><text x="880" y="82">Case brief</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="90" y="98">FORM, DOCS, URL</text><text x="248" y="98">CRAWL, KYB, WHOIS</text><text x="406" y="98">LLM &rarr; ATOMIC FACTS</text>
+          <text x="564" y="98">DEDUPE, LINK</text><text x="722" y="98">N-HOP + SEMANTIC</text><text x="880" y="98">HUMAN DECIDES + CORRECTS</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".42" fill="none" marker-end="url(#f3a)">
+          <path d="M160,85 L172,85"/><path d="M318,85 L330,85"/><path d="M476,85 L488,85"/><path d="M634,85 L646,85"/><path d="M792,85 L804,85"/>
+        </g>
+
+        <!-- vertical links A <-> B -->
+        <g fill="none" marker-end="url(#f3k)" stroke="var(--accent)">
+          <path d="M564,112 L564,194"/><path d="M722,194 L722,112"/><path d="M880,112 L880,194"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">
+          <text x="572" y="140">upsert entities</text>
+          <text x="730" y="140">read precedent</text>
+          <text x="872" y="176" text-anchor="end">write decision, rationale + feedback</text>
+        </g>
+
+        <!-- ROW B : MEMORY -->
+        <text x="20" y="186" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">2 &middot; THE MEMORY LAYER &mdash; SHARED, VERSIONED, PROVENANCE-BEARING</text>
+        <rect x="20" y="198" width="930" height="118" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".55"/>
+        <g fill="var(--surface)" stroke="var(--accent)" stroke-opacity=".45">
+          <rect x="36" y="228" width="288" height="68" rx="4"/><rect x="340" y="228" width="288" height="68" rx="4"/><rect x="644" y="228" width="288" height="68" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="13" fill="currentColor">
+          <text x="180" y="254">Context graph</text><text x="484" y="254">Case memory</text><text x="788" y="254">Policy taxonomy</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="currentColor" fill-opacity=".6">
+          <text x="180" y="272">MERCHANTS &middot; PEOPLE &middot; DOMAINS</text><text x="180" y="286">PAYOUT &middot; CHANNELS &middot; OFFERINGS</text>
+          <text x="484" y="272">EPISODIC: WHAT HAPPENED</text><text x="484" y="286">ADD / UPDATE / INVALIDATE</text>
+          <text x="788" y="272">ACCEPTED / RESTRICTED</text><text x="788" y="286">PROHIBITED &middot; DODO POLICY</text>
+        </g>
+
+        <!-- ROW C : LIFECYCLE -->
+        <text x="20" y="386" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--sig)">3 &middot; LIFECYCLE &mdash; PER ACTIVE MERCHANT, CONTINUOUS</text>
+        <g fill="var(--surface)" stroke="var(--sig)" stroke-opacity=".5">
+          <rect x="20" y="398" width="140" height="54" rx="4"/><rect x="178" y="398" width="140" height="54" rx="4"/><rect x="336" y="398" width="140" height="54" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="90" y="422">Re-observe</text><text x="248" y="422">Reconcile</text><text x="406" y="422">Drift alert</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="90" y="438">SITE, OFFERINGS, DISCORD</text><text x="248" y="438">CLAIMED VS OBSERVED</text><text x="406" y="438">&rarr; RE-REVIEW</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".42" fill="none" marker-end="url(#f3a)">
+          <path d="M160,425 L172,425"/><path d="M318,425 L330,425"/>
+        </g>
+        <g fill="none" stroke="var(--sig)" marker-end="url(#f3s)">
+          <path d="M90,316 L90,398"/><path d="M248,398 L248,316"/><path d="M406,398 L406,316"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)">
+          <text x="98" y="346">underwriting snapshot</text>
+          <text x="256" y="346">observed offerings</text>
+          <text x="414" y="376">incident</text>
+        </g>
+
+        <!-- ROW D : LEARNING -->
+        <text x="494" y="518" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">4 &middot; SLOW PATH &mdash; ON CONFIRMED OUTCOME, MONTHS</text>
+        <g fill="var(--surface)" stroke="var(--accent)" stroke-opacity=".5">
+          <rect x="494" y="530" width="140" height="54" rx="4"/><rect x="652" y="530" width="140" height="54" rx="4"/><rect x="810" y="530" width="140" height="54" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="564" y="554">Outcome</text><text x="722" y="554">Distil</text><text x="880" y="554">Replay gate</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="564" y="570">CLAIM, DISPUTE, EXIT</text><text x="722" y="570">CANDIDATE MEMORY</text><text x="880" y="570">IMPROVE? REGRESS?</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".42" fill="none" marker-end="url(#f3a)">
+          <path d="M634,557 L646,557"/><path d="M792,557 L804,557"/>
+        </g>
+        <g fill="none" stroke="var(--accent)" marker-end="url(#f3k)">
+          <path d="M850,316 L850,530"/><path d="M920,530 L920,316"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)" text-anchor="end">
+          <text x="842" y="400">replay over history</text>
+          <text x="912" y="440">promote if it improves</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Read the vertical arrows, not the horizontal ones.</b> The left-to-right chains are ordinary processing. What makes this a memory layer rather than a scoring service is that every lane writes evidence into the same store and reads judgement back out of it &mdash; so a fact learned while monitoring one merchant in lane 3 is available to a decision about a different applicant in lane 1, minutes later. The replay gate on the far right is the only path by which a distilled pattern reaches the live decision policy, and it is what makes an incident strengthen the system instead of merely alarming it.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 4 ============ -->
+<section>
+  <h2><span class="sn">Figure 4</span>How the memory updates itself</h2>
+  <p>This is the mechanism that makes the layer keep learning day to day. Every case conversation and every correction an analyst makes is extracted into atomic facts and reconciled against what memory already holds &mdash; not appended, reconciled. The next case reads the updated memory minutes later. <strong>There is no training step and nothing to schedule.</strong> The memory improves as a side effect of being used.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 360" role="img" aria-label="Three inputs - case conversations, manual analyst feedback, and confirmed outcomes - feed fact extraction, then reconciliation against existing memory, which resolves to one of four actions: add, update, invalidate or no-op. The updated memory is available to the next case immediately, with no retraining step.">
+        <defs>
+          <marker id="f4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="f4k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+          <marker id="f4s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+
+        <text x="20" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="currentColor" fill-opacity=".55">WHAT WRITES TO MEMORY</text>
+        <text x="712" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">HOW MEMORY RESOLVES IT</text>
+
+        <g fill="var(--surface)" stroke="currentColor" stroke-opacity=".42">
+          <rect x="20" y="44" width="180" height="56" rx="4"/><rect x="20" y="124" width="180" height="56" rx="4"/><rect x="20" y="204" width="180" height="56" rx="4"/>
+          <rect x="250" y="124" width="170" height="56" rx="4"/>
+        </g>
+        <rect x="470" y="124" width="190" height="56" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".7"/>
+
+        <g text-anchor="middle" font-size="12.5" fill="currentColor">
+          <text x="110" y="68">Case conversation</text><text x="110" y="148">Manual feedback</text><text x="110" y="228">Confirmed outcome</text>
+          <text x="335" y="148">Extract facts</text>
+        </g>
+        <text x="565" y="148" text-anchor="middle" font-size="12.5" fill="var(--accent)">Reconcile vs. memory</text>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="110" y="84">EVERY CASE, EVERY DAY</text><text x="110" y="164">ANALYST CORRECTS OR CONFIRMS</text><text x="110" y="244">TERMINATION, CLAIM &middot; MONTHS</text>
+          <text x="335" y="164">ATOMIC &middot; WITH PROVENANCE</text>
+        </g>
+        <text x="565" y="164" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="var(--accent)">NOT APPENDED &mdash; RECONCILED</text>
+
+        <g fill="none" stroke="currentColor" stroke-opacity=".42" marker-end="url(#f4a)">
+          <path d="M200,72 C226,72 226,140 244,140"/><path d="M200,152 L244,152"/><path d="M200,232 C226,232 226,166 244,166"/>
+        </g>
+        <path d="M420,152 L464,152" fill="none" stroke="var(--accent)" marker-end="url(#f4k)"/>
+
+        <g fill="var(--surface)">
+          <rect x="712" y="36" width="256" height="50" rx="4" stroke="var(--accent)" stroke-opacity=".6"/>
+          <rect x="712" y="96" width="256" height="50" rx="4" stroke="var(--accent)" stroke-opacity=".6"/>
+          <rect x="712" y="156" width="256" height="50" rx="4" stroke="var(--sig)" stroke-opacity=".6"/>
+          <rect x="712" y="216" width="256" height="50" rx="4" stroke="currentColor" stroke-opacity=".3"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.2">
+          <text x="730" y="60" fill="var(--accent)">ADD</text><text x="730" y="120" fill="var(--accent)">UPDATE</text>
+          <text x="730" y="180" fill="var(--sig)">INVALIDATE</text><text x="730" y="240" fill="currentColor" fill-opacity=".5">NO-OP</text>
+        </g>
+        <g font-size="11.5" fill="currentColor" fill-opacity=".72">
+          <text x="730" y="76">a fact we did not hold</text><text x="730" y="136">refines scope or confidence</text>
+          <text x="730" y="196">supersedes what it contradicts</text><text x="730" y="256">already known &mdash; nothing changes</text>
+        </g>
+
+        <g fill="none" stroke="var(--accent)" stroke-opacity=".7" marker-end="url(#f4k)">
+          <path d="M660,140 C686,140 686,61 706,61"/><path d="M660,146 C686,146 686,121 706,121"/>
+        </g>
+        <path d="M660,158 C686,158 686,181 706,181" fill="none" stroke="var(--sig)" stroke-opacity=".7" marker-end="url(#f4s)"/>
+        <path d="M660,164 C686,164 686,241 706,241" fill="none" stroke="currentColor" stroke-opacity=".3" marker-end="url(#f4a)"/>
+
+        <path d="M840,266 L840,316 L110,316 L110,106" fill="none" stroke="var(--accent)" stroke-opacity=".7" marker-end="url(#f4k)"/>
+        <text x="475" y="308" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing=".8" fill="var(--accent)">AVAILABLE TO THE NEXT CASE IMMEDIATELY &mdash; NO RETRAINING STEP</text>
+      </svg>
+    </div>
+    <figcaption><b>Reconciled, not appended.</b> The four outcomes on the right are what separate a memory layer from a log. <span style="color:var(--sig)">INVALIDATE</span> is the one that does the real work and the one that carries the risk: a fact written with false confidence propagates into every future decision and is far harder to spot than a bad one-off judgement. That is why every memory carries provenance and supersedes rather than overwrites &mdash; so any past decision can be reconstructed against the memory as it stood at the time, and a poisoned fact can be traced and rolled back.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 5 ============ -->
+<section>
+  <h2><span class="sn">Figure 5</span>The wider risk taxonomy &mdash; and where we are blind</h2>
+  <p>The three cases in Figure 2 came from worked examples, not a systematic sweep. Reading across acquirer-side fraud literature, Visa&rsquo;s monitoring rules and current FTC enforcement, they turn out to sit in only two of <strong>four postures</strong> a merchant can take. The other two are not adversarial at all &mdash; and the pipeline as drawn cannot see them, because everything it collects is <em>content</em>: crawl the site, extract facts, diff the offering. That catches a merchant lying or drifting. It is blind to one that is failing or being attacked.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 615" role="img" aria-label="Four panels describing merchant risk postures. Deceiving us: undisclosed illegality, recidivist rings, transaction laundering, merchant identity fraud, bust-out. Drifting from us: product drift, deceptive billing, AI abuse-control decay. Failing: insolvency with prepaid obligations, concentration. Being attacked: account takeover with payout redirection, card testing on the merchant checkout. The last two postures are entirely uncovered by the proposed pipeline.">
+        <defs>
+          <marker id="f5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+        </defs>
+        <text x="20" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="currentColor" fill-opacity=".55">FOUR POSTURES A MERCHANT CAN TAKE &mdash; EACH NEEDS A DIFFERENT SIGNAL</text>
+
+        <rect x="20" y="50" width="470" height="262" rx="6" fill="none" stroke="var(--accent)" stroke-opacity=".5"/>
+        <rect x="510" y="50" width="470" height="262" rx="6" fill="none" stroke="var(--accent)" stroke-opacity=".5"/>
+        <rect x="20" y="332" width="470" height="262" rx="6" fill="var(--sig-soft)" fill-opacity=".5" stroke="var(--sig)" stroke-opacity=".6"/>
+        <rect x="510" y="332" width="470" height="262" rx="6" fill="var(--sig-soft)" fill-opacity=".5" stroke="var(--sig)" stroke-opacity=".6"/>
+
+        <!-- P1 -->
+        <text x="42" y="82" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--accent)">DECEIVING US</text>
+        <text x="42" y="100" font-size="11.5" fill="currentColor" fill-opacity=".6">Adversarial from day one</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="48" cy="128" r="4" fill="var(--accent)"/><text x="64" y="132">Undisclosed illegality &mdash; the rights case <tspan fill-opacity=".5">(A)</tspan></text>
+          <circle cx="48" cy="154" r="4" fill="var(--accent)"/><text x="64" y="158">Recidivist ring, nominee directors <tspan fill-opacity=".5">(C)</tspan></text>
+          <circle cx="48" cy="180" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="184">Transaction laundering &mdash; fronting another business</text>
+          <circle cx="48" cy="206" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="210">Merchant identity fraud &mdash; a real firm&rsquo;s papers</text>
+          <circle cx="48" cy="232" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="236">Bust-out &mdash; ramp volume, vanish before disputes</text>
+        </g>
+        <line x1="42" y1="256" x2="468" y2="256" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="42" y="278" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="42" y="296" font-size="11.5" fill="currentColor" fill-opacity=".75">Context graph + transaction pattern vs. underwritten forecast</text>
+
+        <!-- P2 -->
+        <text x="532" y="82" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--accent)">DRIFTING FROM US</text>
+        <text x="532" y="100" font-size="11.5" fill="currentColor" fill-opacity=".6">Honest at intake, diverges later</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="538" cy="128" r="4" fill="var(--accent)"/><text x="554" y="132">Product drift into a prohibited category <tspan fill-opacity=".5">(B)</tspan></text>
+          <circle cx="538" cy="154" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="158">Deceptive billing &mdash; hard-to-cancel, auto-renewal</text>
+          <circle cx="538" cy="180" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="184">AI abuse controls decaying after launch</text>
+        </g>
+        <line x1="532" y1="256" x2="958" y2="256" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="532" y="278" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="532" y="296" font-size="11.5" fill="currentColor" fill-opacity=".75">Content diff + refund and dispute velocity</text>
+
+        <!-- P3 -->
+        <text x="42" y="364" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--sig)">FAILING</text>
+        <text x="42" y="382" font-size="11.5" fill="currentColor" fill-opacity=".6">No bad actor at all &mdash; and no coverage today</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="48" cy="410" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="414">Insolvency with prepaid annual subscriptions</text>
+          <circle cx="48" cy="436" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="440">Concentration &mdash; one merchant, too much volume</text>
+        </g>
+        <text x="64" y="472" font-size="11.5" fill="var(--sig)">An honest merchant goes bust owing twelve months</text>
+        <text x="64" y="490" font-size="11.5" fill="var(--sig)">of service. The refunds land on Dodo.</text>
+        <line x1="42" y1="538" x2="468" y2="538" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="42" y="560" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="42" y="578" font-size="11.5" fill="currentColor" fill-opacity=".75">Unfulfilled prepaid balance tracked per merchant</text>
+
+        <!-- P4 -->
+        <text x="532" y="364" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--sig)">BEING ATTACKED</text>
+        <text x="532" y="382" font-size="11.5" fill="currentColor" fill-opacity=".6">The merchant is the victim &mdash; and no coverage today</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="538" cy="410" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="414">Account takeover &rarr; payout details redirected</text>
+          <circle cx="538" cy="436" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="440">Card testing run through their checkout</text>
+        </g>
+        <text x="554" y="472" font-size="11.5" fill="var(--sig)">Assessing the business tells you nothing here.</text>
+        <text x="554" y="490" font-size="11.5" fill="var(--sig)">The business is fine. The account is not.</text>
+        <line x1="532" y1="538" x2="958" y2="538" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="532" y="560" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="532" y="578" font-size="11.5" fill="currentColor" fill-opacity=".75">Account behaviour &mdash; logins, payout changes, velocity</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--accent);border-radius:50%;width:9px;height:9px"></i>Covered by the pipeline as drawn</span>
+      <span><i style="border:1.6px solid var(--sig);background:none;border-radius:50%;width:9px;height:9px"></i>Not covered &mdash; needs a signal we do not collect</span>
+    </div>
+    <figcaption><b>Eight of twelve are uncovered, and the pattern is not random.</b> Every gap is a <em>financial or behavioural</em> signal rather than a content one &mdash; volume against forecast, dispute velocity, payout-detail changes, unfulfilled prepaid balance. The fix is one more input lane into the same context graph, not a second system. Two gaps deserve naming out loud: <b>deceptive billing</b> is probably the highest-probability risk in Dodo&rsquo;s actual customer base, since the merchant and product are entirely real and only the cancellation flow offends &mdash; and the FTC has pursued a merchant of record directly on those grounds. And <b>insolvency</b> is not fraud at all, so no amount of fraud detection will ever surface it.</figcaption>
+  </figure>
+</section>
+
+<footer>
+  <p>Companion to the <a href="https://claude.ai/code/artifact/9fc54cd8-b756-4a8c-8ac4-9f46379c935f">Merchant Risk Memory problem statement</a> &middot; Anushika &middot; 20 Aug 2026. Day counts in Figure 2 are drawn from the illustrative cases in §2 of that document, not from Dodo's observed data &mdash; replacing them with real detection lag is an open item; see §6 of that document for every number we are assuming.</p>
+</footer>
+
+</div>
+</div>
+<div class="panel" role="tabpanel" id="tab-console" aria-labelledby="btn-console" hidden>
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Dodo Payments &middot; Console design &middot; v4 &mdash; as built</div>
+  <h1>Merchant Risk Console</h1>
+  <p class="dek">The console is running. This is what shipped, and &mdash; more usefully &mdash; the four places where the design we wanted and the data we actually have disagreed, and what we did about it. Every number on every screen is computed by the engine. Nothing here is a placeholder.</p>
+</header>
+
+<section>
+  <h2><span class="sn">1</span>The shell</h2>
+  <p>A fixed left sidebar with eight destinations, a global search, and a status card that reports what the memory layer currently believes. The palette is Dodo&rsquo;s own: lime <code>#C6FE1E</code> on the active item and the primary action, forest-green-black <code>#00160D</code> for text.</p>
+  <p>Two things are deliberately <strong>absent</strong>. The <span class="gone">always-on summary bar</span> from v3 is gone &mdash; once an Overview screen existed, a strip repeating the same five numbers on every tab was duplication, and it made Chat and History harder to read for no gain. And there are no <span class="gone">Reports</span>, <span class="gone">Integrations</span> or <span class="gone">Settings</span> tabs: we had nothing real to put behind them, and an empty destination is worse than a missing one.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Destination</th><th>Answers</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Overview</td><td>How are we doing, and what changed</td></tr>
+        <tr><td class="k">Merchants</td><td>Every merchant memory has an opinion about, ranked by P(bad)</td></tr>
+        <tr><td class="k">Evaluations</td><td>The single worklist of everything needing a human</td></tr>
+        <tr><td class="k">Memory layer</td><td>What it knows, how it changed, whether it is getting better</td></tr>
+        <tr><td class="k">Graph explorer</td><td>What a merchant shares with the rest of the portfolio</td></tr>
+        <tr><td class="k">Alerts</td><td>Post-approval lifecycle and drift</td></tr>
+        <tr><td class="k">Chat</td><td>Ask, tell, correct &mdash; with evidence cited under every answer</td></tr>
+        <tr><td class="k">History</td><td>What was decided, and the rationale it learned from</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="sn">2</span>Overview</h2>
+  <figure>
+    <div class="mock">
+      <div class="bar"><i></i><i></i><i></i> &nbsp;Merchant Risk Console</div>
+      <div class="body m-app">
+        <div class="side-m">
+          <div class="brandrow"><s></s><b>Dodo</b></div>
+          <a class="on"><s></s>Overview</a>
+          <a><s></s>Merchants</a>
+          <a><s></s>Evaluations<i>11</i></a>
+          <a><s></s>Memory layer<i>18</i></a>
+          <a><s></s>Graph explorer</a>
+          <a><s></s>Alerts<i>25</i></a>
+          <a><s></s>Chat</a>
+          <a><s></s>History</a>
+          <div class="statusm"><b>Memory layer status</b>
+            <u>&bull; Active</u> &middot; 18 records<br>mean confidence 90.6%</div>
+        </div>
+        <div class="appmain">
+          <div class="topm"><s></s></div>
+          <div class="greet">Good afternoon, Anushika
+            <em>Your memory layer is continuously learning from every decision and reconciling what it already believed.</em></div>
+          <div class="statrow">
+            <div class="statc"><em>Total merchants</em><b>2,579<u class="dn">&darr;8%</u></b><i>approved and live</i></div>
+            <div class="statc"><em>High risk merchants</em><b>8</b><i>at or above the 13.8% operating point</i></div>
+            <div class="statc"><em>Decisions on file</em><b>3,984<u class="dn">&darr;6%</u></b><i>approvals and declines</i></div>
+            <div class="statc"><em>Memory confidence</em><b>90.6%</b><i>mean across 18 records in force</i></div>
+          </div>
+          <div class="twocol">
+            <div class="cardm"><div class="ttl">Merchant risk distribution <span>P(bad) across 2,579 live merchants</span></div>
+              <div class="donutrow">
+                <svg viewBox="0 0 120 120" role="img" aria-label="Risk distribution: 99% low risk">
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="var(--surface-3)" stroke-width="18"/>
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#17A05C" stroke-width="18"
+                    stroke-dasharray="286 3" transform="rotate(-90 60 60)"/>
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#D33A3F" stroke-width="18"
+                    stroke-dasharray="3 286" stroke-dashoffset="-286" transform="rotate(-90 60 60)"/>
+                  <text x="60" y="58" text-anchor="middle" font-size="16" fill="currentColor"
+                    font-family="Helvetica,Arial">2,579</text>
+                  <text x="60" y="71" text-anchor="middle" font-size="7" fill="var(--muted)">merchants</text>
+                </svg>
+                <div class="lg">
+                  <div><s style="background:#17A05C"></s>Low risk<u>2,554 &middot; 99%</u></div>
+                  <div><s style="background:#FFD84B"></s>Medium risk<u>17 &middot; 0.7%</u></div>
+                  <div><s style="background:#D2691E"></s>High risk<u>5 &middot; 0.2%</u></div>
+                  <div><s style="background:#D33A3F"></s>Very high risk<u>3 &middot; 0.1%</u></div>
+                </div>
+              </div>
+            </div>
+            <div class="cardm"><div class="ttl">Recent evaluations</div>
+              <div class="listm">
+                <div><s>F</s><b>Foxgloveloop<em>Digital goods</em></b><i class="i-warn">declined</i></div>
+                <div><s>ZC</s><b>Zephyr Cloud 6<em>AI product</em></b><i class="i-warn">declined</i></div>
+                <div><s>Q</s><b>Quillgrid<em>Digital goods</em></b><i class="i-ok">approved</i></div>
+                <div><s>OF</s><b>Oakfieldpeak Flow<em>SaaS</em></b><i class="i-ok">approved</i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>The Overview, as it renders.</b> Four figures, a risk distribution cut at the operating point rather than at arbitrary quintiles, and the recent decisions. The sidebar status card is the memory layer reporting on itself &mdash; how many records are in force and how sure it is of them.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="sn">3</span>Where the design and the data disagreed</h2>
+  <p>The design we worked from asked for four things the engine cannot honestly produce. Each was substituted rather than faked, because a demo that prints a confident number it cannot derive is the exact failure this project exists to prevent.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Asked for</th><th>Shipped</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Memory accuracy 94.6%</td><td>Memory confidence 90.6%</td><td>There is no accuracy metric. Mean confidence across the records currently in force is a real quantity the store can report.</td></tr>
+        <tr><td class="k">&uarr;12% vs last month</td><td>Deltas computed from decision dates</td><td>Two of the four stats have no prior period to compare against. They carry a note instead of an invented arrow &mdash; which is why one reads &minus;8%, not a flattering &uarr;.</td></tr>
+        <tr><td class="k">Memory score /100 per merchant</td><td>100 &minus; P(bad), labelled as such</td><td>A bare score invites the reader to think it means something independent. It is one number in two dresses, and the column says so.</td></tr>
+        <tr><td class="k">Retail, F&amp;B, Electronics, Apparel</td><td>Dodo&rsquo;s policy categories</td><td>SaaS, AI product, digital goods, templates &amp; plugins, ebooks. Generic retail verticals describe a business Dodo is not in.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <span class="tag">The rule that produced all four</span>
+    <p>Every figure on screen is traceable to something the engine computed. Where the data does not support the design, the design changes &mdash; not the number.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="sn">4</span>Merchants and the graph</h2>
+  <p><strong>Merchants</strong> is the full corpus, searchable and filterable by risk band, sorted by P(bad) descending so the merchants that can move sit at the top. A merchant that has not started transacting reads &ldquo;not live&rdquo;, not <code>$0</code>.</p>
+  <p><strong>Graph explorer</strong> draws the corroborating routes between an applicant and merchants we have already judged. Shared entities above degree 40 are treated as hubs and never carry corroboration &mdash; a shared payment processor is not evidence. That suppression is what keeps the graph from asserting that half the portfolio is related to the other half.</p>
+</section>
+
+<section>
+  <h2><span class="sn">5</span>Two bugs the build surfaced</h2>
+  <p>Seeding the corpus with Dodo&rsquo;s real, publicly-named customers is a test as much as a feature: a clean population that the engine must clear. It did not, twice &mdash; and both failures were the same mistake wearing different clothes. <strong>Prose similarity being mistaken for evidence.</strong></p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td class="k">A clean merchant pushed to 22%</td><td>A memory reading &ldquo;refund rates above 15 percent&hellip;&rdquo; carried no predicate, so it matched on text. Any pitch containing &ldquo;subscription&rdquo; and &ldquo;free trial&rdquo; fired it.</td><td>The memory now carries the predicate its own prose names: <code>refund_rate &ge; 0.15</code>. Behavioural lessons match on the observable, never on the wording.</td></tr>
+        <tr><td class="k">A clean merchant drawing a 3&times; likelihood ratio</td><td>Precedent search had no similarity floor. A neighbour matching at cosine 0.13 on <code>subscription</code>, <code>saas</code>, <code>github</code>, <code>email</code> counted as precedent.</td><td>A measured floor of 0.20. Genuine precedent in this corpus sits at 0.24 and above; below that the shared vocabulary is the corpus&rsquo;s, not the merchant&rsquo;s.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Both carry regression tests. The floor is documented with the measurement that produced it, not asserted as a constant.</p>
+</section>
+
+<section>
+  <h2><span class="sn">6</span>Real Dodo merchants in the corpus</h2>
+  <p>All <strong>17</strong> publicly-named Dodo customers are seeded: Mole, Vibe3D, Draftly, ReplyDaddy, CatDoes, Indilingo, Scira&nbsp;AI, PeerPush, IndieKit, Betide&nbsp;Studio, Healthify, Parakeet&nbsp;AI, MATIKS, GPAI, Cardboard, SurgeGrowth and Vaya. They give the demo a control population with real product descriptions and plausible operating shapes, against ~4,000 invented merchants.</p>
+  <div class="callout warn">
+    <span class="tag">Hard rule, enforced in code</span>
+    <p><strong>A real merchant never appears next to an adverse finding.</strong> Not flagged, not declined, not in a fraud ring, not graph-linked to a terminated merchant, never carrying a &ldquo;went bad&rdquo; label, never cited as adverse precedent.</p>
+    <p>These are real businesses. A screenshot showing one two hops from a piracy termination would be defamatory in effect regardless of intent. The corpus is randomised, so this is an assertion in <code>build()</code> plus six tests that fail the build &mdash; not a convention. Every fraud ring and every termination uses an invented name.</p>
+  </div>
+  <p style="font-size:13.5px;color:var(--muted)">Product descriptions are factual, drawn from public sources. Operating figures &mdash; volume, transaction counts, refund rates &mdash; are illustrative, and the interface says so.</p>
+</section>
+
+<section>
+  <h2><span class="sn">7</span>Where Claude goes &mdash; and where it must not</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Claude does</th><th>Claude never</th></tr></thead>
+      <tbody>
+        <tr><td>Compose the answer from retrieved context</td><td class="no">Decide. The P(bad) arithmetic stays deterministic</td></tr>
+        <tr><td>Read an unstructured application into fields</td><td class="no">Invent evidence not present in the retrieval</td></tr>
+        <tr><td>Draft a candidate memory from a rationale</td><td class="no">Write to memory silently &mdash; reconciliation is explicit</td></tr>
+        <tr><td>Suggest a distilled pattern after an incident</td><td class="no">Promote a pattern past the replay gate</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The gate is the load-bearing part: a distilled pattern is promoted only if, replayed over the whole corpus, it catches more without flagging more. That delta is the anti-fragility claim expressed as a number rather than an adjective.</p>
+  <div class="callout">
+    <span class="tag">The API key</span>
+    <p>The key lives in an environment variable on the server. The browser calls our endpoint; our server calls Anthropic. A key in client-side code is readable through view-source and billable by whoever finds it. The console degrades to the deterministic path when no key is set &mdash; every screen above renders either way.</p>
+  </div>
+</section>
+
+<footer>
+  Anushika &middot; Dodo Payments &middot; 20 August 2026 &middot; v4, as built.
+  Synthetic corpus generated locally from seed 20260820; the application makes no network calls of its own.
+</footer>
+
+</div>
+</div>
+</main>
+
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs button'));
+  function show(id, push) {
+    tabs.forEach(function (b) {
+      var on = b.dataset.tab === id;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById('tab-' + b.dataset.tab).hidden = !on;
+    });
+    if (push && location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
+    window.scrollTo({ top: 0 });
+  }
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () { show(b.dataset.tab, true); });
+    b.addEventListener('keydown', function (e) {
+      var i = tabs.indexOf(b), n = null;
+      if (e.key === 'ArrowRight') n = tabs[(i + 1) % tabs.length];
+      if (e.key === 'ArrowLeft') n = tabs[(i - 1 + tabs.length) % tabs.length];
+      if (n) { e.preventDefault(); n.focus(); show(n.dataset.tab, true); }
+    });
+  });
+  var h = (location.hash || '').replace('#', '');
+  if (h && document.getElementById('tab-' + h)) show(h, false);
+})();
+</script>

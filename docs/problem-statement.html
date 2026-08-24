@@ -1,0 +1,343 @@
+<title>Merchant Risk Memory</title>
+<style>
+:root{
+  --paper:#F5F6F8; --surface:#FFFFFF; --surface-2:#EDEFF3;
+  --ink:#14161C; --ink-2:#3C4252; --muted:#5A6072; --faint:#878EA0;
+  --rule:#DFE2E9; --rule-2:#C9CFDA;
+  --accent:#3B3FA8; --accent-soft:#E8E9F8; --accent-line:#B9BBEA;
+  --ok:#2F6B4F; --ok-bg:#E4EFE9;
+  --warn:#B47410; --warn-bg:#F7EEDC;
+  --bad:#A3302B; --bad-bg:#F6E3E1; --sig:#A3302B;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0E1016; --surface:#171A22; --surface-2:#1E222C;
+  --ink:#E6E8EE; --ink-2:#C2C7D4; --muted:#969DB0; --faint:#767E92;
+  --rule:#262B36; --rule-2:#333A48;
+  --accent:#9296F2; --accent-soft:#1C1F35; --accent-line:#3A3E70;
+  --ok:#6FBF95; --ok-bg:#14241C; --warn:#E0A64A; --warn-bg:#2A2013;
+  --bad:#E68078; --bad-bg:#2C1715; --sig:#E68078;
+}}
+:root[data-theme="dark"]{
+  --paper:#0E1016; --surface:#171A22; --surface-2:#1E222C;
+  --ink:#E6E8EE; --ink-2:#C2C7D4; --muted:#969DB0; --faint:#767E92;
+  --rule:#262B36; --rule-2:#333A48;
+  --accent:#9296F2; --accent-soft:#1C1F35; --accent-line:#3A3E70;
+  --ok:#6FBF95; --ok-bg:#14241C; --warn:#E0A64A; --warn-bg:#2A2013;
+  --bad:#E68078; --bad-bg:#2C1715; --sig:#E68078;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:15.5px;line-height:1.58;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:860px;margin:0 auto;padding:0 28px 72px;}
+
+.mast{padding:52px 0 20px;border-bottom:1px solid var(--rule);}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,46px);line-height:1.06;
+  letter-spacing:-.015em;margin:12px 0 0;text-wrap:balance;}
+.dek{font-family:var(--serif);font-size:18px;line-height:1.48;color:var(--ink-2);max-width:60ch;margin:14px 0 0;text-wrap:pretty;}
+.metastrip{display:flex;flex-wrap:wrap;margin-top:26px;border-top:1px solid var(--rule);}
+.metastrip div{flex:1 1 130px;padding:10px 16px 10px 0;border-right:1px solid var(--rule);}
+.metastrip div:last-child{border-right:0}
+.metastrip dt{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 2px;}
+.metastrip dd{margin:0;font-size:13.5px;color:var(--ink-2);}
+
+section{margin:0 0 40px;}
+h2{font-family:var(--serif);font-weight:400;font-size:24px;line-height:1.2;margin:0 0 12px;text-wrap:balance;}
+h2 .sn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);display:block;margin-bottom:7px;}
+h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:400;margin:24px 0 9px;}
+p{margin:0 0 12px;max-width:70ch;text-wrap:pretty;}
+ul,ol{max-width:70ch;padding-left:19px;margin:0 0 12px;}
+li{margin:0 0 6px;}
+strong{font-weight:650}
+code{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 5px;border-radius:3px;color:var(--ink-2);}
+a{color:var(--accent)}
+
+.chip{display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 6px;border-radius:3px;vertical-align:1.5px;}
+.c-ok{background:var(--ok-bg);color:var(--ok)} .c-bad{background:var(--bad-bg);color:var(--bad)}
+.c-warn{background:var(--warn-bg);color:var(--warn)} .c-neutral{background:var(--surface-2);color:var(--muted)}
+
+.statement{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:5px;padding:18px 22px;margin:18px 0;}
+.statement .tag{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px;}
+.statement p:last-child{margin-bottom:0}
+
+.cases{display:grid;gap:12px;margin:0 0 12px;}
+.case{background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--sig);
+  border-radius:4px;padding:14px 18px;}
+.case h5{font-family:var(--serif);font-weight:400;font-size:17px;margin:0 0 2px;}
+.case .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 8px;}
+.case p{font-size:14.5px;margin:0 0 8px;}
+.case p:last-child{margin:0}
+.case .pt{color:var(--ink-2);border-top:1px dotted var(--rule-2);padding-top:8px;}
+.case .pt b{color:var(--ink);font-weight:650}
+
+.tbl{overflow-x:auto;border:1px solid var(--rule);border-radius:5px;background:var(--surface);margin:0 0 14px;}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:540px;}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:400;text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule-2);background:var(--surface-2);white-space:nowrap;}
+td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.45;}
+tr:last-child td{border-bottom:0}
+td.k{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap;}
+
+figure{margin:18px 0 8px}
+figure svg{display:block;width:100%;height:auto}
+.figbox{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:16px 14px 10px;overflow-x:auto;}
+figcaption{font-size:13px;color:var(--muted);margin-top:10px;max-width:72ch;line-height:1.48}
+figcaption b{color:var(--ink-2);font-weight:650}
+
+.q{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule);align-items:start;}
+.q .qn{font-family:var(--mono);font-size:11.5px;color:var(--faint);padding-top:2px;}
+.q p{margin:0;font-size:14.5px;max-width:66ch}
+.q .why{font-size:13px;color:var(--muted);margin:3px 0 0}
+.q .own{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
+
+.assume{display:grid;grid-template-columns:44px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px;}
+.assume .id{font-family:var(--mono);font-size:11px;color:var(--accent);padding-top:2px}
+
+footer{border-top:1px solid var(--rule);margin-top:8px;padding-top:16px;font-size:12.5px;color:var(--muted);}
+footer p{max-width:74ch}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Dodo Payments &middot; Risk &amp; Compliance &middot; Problem definition v0.6</div>
+  <h1>Merchant Risk Memory</h1>
+  <p class="dek">Dodo is the merchant of record. Every merchant we admit borrows our licences and our liability. This defines what an anti-fragile memory layer is being asked to solve, and states every number we are assuming in order to start building.</p>
+  <dl class="metastrip">
+    <div><dt>Status</dt><dd>Draft for alignment</dd></div>
+    <div><dt>Author</dt><dd>Anushika</dd></div>
+    <div><dt>Numbers</dt><dd>Assumed &mdash; see §6</dd></div>
+    <div><dt>Date</dt><dd>20 Aug 2026</dd></div>
+  </dl>
+</header>
+
+<section style="padding-top:34px">
+  <h2><span class="sn">&sect; 1</span>Why this is a company-level risk</h2>
+  <p>As seller of record, Dodo is a party to every transaction &mdash; so the chargeback, the rights-holder claim and the regulator all arrive at Dodo, not at the merchant, who is by then unreachable. And because merchants transact under shared Dodo merchant identifiers, one bad actor's dispute ratio pollutes a pool every honest merchant depends on. <strong>The cost of a bad merchant is not bounded by their volume. It is bounded by our standing with our acquirers.</strong></p>
+  <p>The counterweight matters just as much. Our customer <em>is</em> the solo developer with a two-week-old domain, no company registration and possibly a Stripe ban in their history &mdash; indistinguishable from a fraudster on every naive feature. A system tuned only to avoid bad merchants converges on rejecting everyone, and an MoR that rejects everyone has no business.</p>
+  <p>So the objective is not &ldquo;catch fraud.&rdquo; It is: <strong>maximise approved legitimate volume within a bounded expected-loss and dispute-ratio budget</strong>, and get faster and more confident at the boundary over time.</p>
+
+  <div class="statement">
+    <span class="tag">Problem statement</span>
+    <p>Dodo assumes full seller-of-record liability but decides from <strong>isolated point-in-time evidence</strong>, using <strong>human judgement that does not persist</strong>, against <strong>outcomes that arrive months later and are never fed back</strong>. The same losses recur, and the reasoning behind a rejection lives in one analyst's head.</p>
+    <p><strong>We need to turn every merchant decision, incident and outcome into durable, connected, retrievable memory &mdash; so each new decision carries everything the platform has learned, and so adverse events measurably strengthen future decisions rather than merely being survived.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 2</span>The three failure modes</h2>
+  <p>If the built system doesn't visibly change the outcome of these, it hasn't solved the problem. Names are illustrative.</p>
+  <div class="cases">
+    <div class="case">
+      <h5>A &mdash; The rights they never had</h5>
+      <p class="lbl">Undisclosed illegality at intake &middot; the copyright case</p>
+      <p>An &ldquo;AI reading companion&rdquo; with a 40,000-book catalogue on a $9/month subscription. Clean site, working demo, <span class="chip c-warn">restricted but permitted</span> category. Approved in four minutes. On day 74 a publisher's counsel writes to Dodo, because Dodo is the seller on the receipt.</p>
+      <p class="pt"><b>Knowable at day 0:</b> no licences were ever requested, and the terms page was copied verbatim from a merchant we terminated in March.</p>
+    </div>
+    <div class="case">
+      <h5>B &mdash; The product that became a different product</h5>
+      <p class="lbl">Post-approval drift &middot; the misrepresentation case</p>
+      <p>Underwritten accurately as B2B meeting summarisation. At month five the team pivots the same domain and the same Dodo account to a <span class="chip c-bad">prohibited</span> category. Nothing in our records changes. Disputes triple.</p>
+      <p class="pt"><b>The structural gap:</b> underwriting is treated as an event, but merchant risk is a time series. The first signal we receive is the chargeback &mdash; the loss itself, arriving as the alert.</p>
+    </div>
+    <div class="case">
+      <h5>C &mdash; The same people, the fourth time</h5>
+      <p class="lbl">Recidivism and rings &middot; the network case</p>
+      <p>Terminated in March, reapplies in June as a new company, new domain, new director on paper. Read on its own terms the application is clean, and it is approved. Same payout account at one remove, same site template, same beneficial owner behind a nominee.</p>
+      <p class="pt"><b>Why no per-application model catches it:</b> the disqualifying fact is not a property of the applicant. It is a relationship to something we already know.</p>
+    </div>
+  </div>
+
+  <h4>2.1 &nbsp;The wider taxonomy &mdash; and two blind spots</h4>
+  <p>Those three came from worked examples, not a sweep. Read against acquirer-side fraud literature, Visa&rsquo;s monitoring rules and current FTC enforcement, they sit in only two of <strong>four postures</strong> a merchant can take &mdash; and the other two are not adversarial at all.</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Posture</th><th>Categories</th><th>Signal it needs</th><th>Covered</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Deceiving us</td><td>Undisclosed illegality <strong>(A)</strong> &middot; recidivist rings <strong>(C)</strong> &middot; transaction laundering &middot; merchant identity fraud &middot; bust-out</td><td>Context graph + volume against underwritten forecast</td><td><span class="chip c-warn">partly</span></td></tr>
+        <tr><td class="k">Drifting from us</td><td>Product drift <strong>(B)</strong> &middot; deceptive billing and hard-to-cancel flows &middot; AI abuse controls decaying after launch</td><td>Content diff + refund and dispute velocity</td><td><span class="chip c-warn">partly</span></td></tr>
+        <tr><td class="k">Failing</td><td>Insolvency with prepaid annual subscriptions &middot; concentration</td><td>Unfulfilled prepaid balance tracked per merchant</td><td><span class="chip c-bad">no</span></td></tr>
+        <tr><td class="k">Being attacked</td><td>Account takeover &rarr; payout redirection &middot; card testing run through the merchant&rsquo;s checkout</td><td>Account behaviour &mdash; logins, payout changes, velocity</td><td><span class="chip c-bad">no</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><strong>The gaps are not random.</strong> Every one is a financial or behavioural signal rather than a content one, and everything §3 proposes is content-oriented &mdash; crawl the site, extract facts, diff the offering. That catches a merchant lying or drifting; it is blind to one that is failing or being attacked. The fix is one more input lane feeding the same graph, not a second system.</p>
+  <p>Two deserve naming out loud. <strong>Deceptive billing</strong> is probably the highest-<em>probability</em> risk in Dodo&rsquo;s actual customer base, because the merchant and the product are entirely real and only the cancellation flow offends &mdash; and the FTC has pursued a merchant of record directly on those grounds, with penalties assessed per affected customer. <strong>Insolvency</strong> is not fraud at all: an honest SaaS merchant goes under owing twelve months of prepaid service, and the refunds land on Dodo. No amount of fraud detection will ever surface it.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 3</span>Why a memory layer and a context graph</h2>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 880 400" role="img" aria-label="A context graph: a clean-looking applicant connects via shared domain infrastructure, payout account and director to two merchants Dodo has already terminated or flagged. An application-level model sees only the left half.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="arS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+        <rect x="6" y="34" width="452" height="338" rx="6" fill="none" stroke="currentColor" stroke-opacity=".28" stroke-dasharray="5 4"/>
+        <text x="14" y="24" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="currentColor" fill-opacity=".6">WHAT AN APPLICATION-LEVEL MODEL SEES</text>
+        <text x="874" y="24" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="10.5" fill="var(--sig)">WHAT DECIDES THE CASE</text>
+
+        <g stroke="currentColor" stroke-opacity=".45" fill="none" marker-end="url(#ar)">
+          <path d="M190,190 C230,190 230,80 264,80"/><path d="M190,198 L264,196"/><path d="M190,208 C230,208 230,312 264,312"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="10" fill="currentColor" fill-opacity=".62" text-anchor="middle">
+          <text x="228" y="128">resolves to</text><text x="228" y="188">pays out to</text><text x="228" y="262">controlled by</text>
+        </g>
+        <g stroke="var(--sig)" stroke-width="1.6" fill="none" marker-end="url(#arS)">
+          <path d="M446,80 C532,80 532,106 614,106"/><path d="M446,192 C532,192 532,124 614,124"/><path d="M446,312 L614,310"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="10" fill="var(--sig)" text-anchor="middle">
+          <text x="530" y="84">same NS + site template</text><text x="530" y="154">same branch, holder pattern</text><text x="530" y="302">also director of</text>
+        </g>
+
+        <rect x="20" y="168" width="170" height="56" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity=".45"/>
+        <text x="105" y="191" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="currentColor">Lumen Labs</text>
+        <text x="105" y="208" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="currentColor" fill-opacity=".62">APPLICANT &middot; ALL FIELDS CLEAN</text>
+
+        <g fill="none" stroke="currentColor" stroke-opacity=".45">
+          <rect x="264" y="56" width="182" height="46" rx="4"/><rect x="264" y="172" width="182" height="46" rx="4"/><rect x="264" y="288" width="182" height="46" rx="4"/>
+        </g>
+        <g text-anchor="middle" fill="currentColor">
+          <text x="355" y="76" font-size="12.5">lumenlabs.app</text>
+          <text x="355" y="91" font-family="ui-monospace,Menlo,monospace" font-size="9" fill-opacity=".6">DOMAIN &middot; 11 DAYS OLD</text>
+          <text x="355" y="192" font-size="12.5">IBAN &bull;&bull;&bull;&bull; 4471</text>
+          <text x="355" y="207" font-family="ui-monospace,Menlo,monospace" font-size="9" fill-opacity=".6">PAYOUT ACCOUNT</text>
+          <text x="355" y="308" font-size="12.5">R. Menon</text>
+          <text x="355" y="323" font-family="ui-monospace,Menlo,monospace" font-size="9" fill-opacity=".6">DIRECTOR ON RECORD</text>
+        </g>
+
+        <g fill="none" stroke="var(--sig)" stroke-width="1.6">
+          <rect x="614" y="80" width="238" height="56" rx="4"/><rect x="614" y="282" width="238" height="56" rx="4"/>
+        </g>
+        <g text-anchor="middle" fill="var(--sig)">
+          <text x="733" y="103" font-family="Georgia,serif" font-size="14">Vellum Reader</text>
+          <text x="733" y="120" font-family="ui-monospace,Menlo,monospace" font-size="9.5">TERMINATED MAR &middot; RIGHTS CLAIM</text>
+          <text x="733" y="305" font-family="Georgia,serif" font-size="14">Bookly Cloud</text>
+          <text x="733" y="322" font-family="ui-monospace,Menlo,monospace" font-size="9.5">ACTIVE &middot; DISPUTE RATIO 4.1%</text>
+        </g>
+        <text x="733" y="362" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="currentColor" fill-opacity=".62">two hops from the applicant</text>
+      </svg>
+    </div>
+    <figcaption><b>Case C as a graph.</b> Nothing inside the dashed frame is disqualifying &mdash; which is exactly why per-application scoring approves it. The decision is carried entirely by the three red edges, each a join through an entity the applicant shares with a merchant we have already judged. Those edges must be stored objects, not something an analyst happens to remember.</figcaption>
+  </figure>
+
+  <ul>
+    <li><strong>The signal is relational.</strong> A classifier consuming an application as a feature vector structurally cannot represent Case C. A graph makes it a two-hop query.</li>
+    <li><strong>There will never be enough labels for supervised learning alone.</strong> Confirmed-bad merchants are rare events &mdash; dozens, not thousands. That is retrieval-and-precedent territory.</li>
+    <li><strong>Reasoning has to be defensible.</strong> &ldquo;The model scored you 0.83&rdquo; cannot be defended to a merchant or an acquirer. &ldquo;Three prior merchants with this fulfilment pattern and rights posture were terminated &mdash; here are the cases&rdquo; can.</li>
+    <li><strong>The threat is adversarial and non-stationary.</strong> A quarterly-retrained model always fights the last war; a memory that admits a case the day it is confirmed adapts in hours.</li>
+  </ul>
+
+  <h4>What we take from Mem0 &mdash; and what we don't</h4>
+  <p>Transferable: LLM-driven extraction of atomic facts, a hybrid vector-plus-graph store, and an explicit add / update / invalidate lifecycle so memory is reconciled rather than appended. Not transferable: the subject. Mem0 remembers preferences, where being wrong is a mild annoyance and there is no adversary. We would store adverse findings about named individuals who are actively trying to defeat the memory, under erasure rights. So every memory of ours carries <strong>provenance, confidence, decay, contestability and supersession</strong> &mdash; which is why I'd borrow the ideas but own the store.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 4</span>How the memory keeps learning</h2>
+  <p>Two update paths, running at very different speeds.</p>
+  <p><strong>Fast &mdash; every case, every day.</strong> Each case conversation and each correction an analyst makes is extracted into atomic facts and reconciled against what memory already holds: <em>add</em> if new, <em>update</em> if it refines something, <em>invalidate</em> if it contradicts something, <em>no-op</em> if already known. The next case reads the updated memory minutes later. There is no training step and nothing to schedule &mdash; the memory improves as a side effect of being used. This is the loop that matters day to day, and it is buildable with what we already have.</p>
+  <p><strong>Slow &mdash; on confirmed outcome.</strong> Terminations, rights claims and dispute breaches arrive 30&ndash;180 days after the decision they judge. They are few and authoritative, and they are what we score the memory against.</p>
+  <p>One risk to design for rather than debate: a memory that updates itself on every interaction also <em>drifts</em> on every interaction, and in risk work the drift direction is always toward paranoia. A fact written with false confidence propagates into every future decision and is much harder to spot than a bad one-off judgement. So the slow path carries a periodic health check.</p>
+  <div class="statement">
+    <span class="tag">Health check &mdash; and the anti-fragility claim</span>
+    <p>After ingesting confirmed outcomes, replay the historical decision set. Memory is healthy if it <strong>improves on cases it previously got wrong, without degrading cases it previously got right.</strong></p>
+    <p>Concretely: the Vellum Reader rights claim should, on replay, cause the system to have flagged Lumen Labs &mdash; and should <em>not</em> cause it to start declining the eleven legitimate e-book merchants. That is also the number that goes up when we feed the system a disaster, which is what makes &ldquo;anti-fragile&rdquo; a measurement rather than a word.</p>
+  </div>
+  <p><strong>What we are explicitly not building:</strong> a policy optimised against a reward signal by trial and error. Rewards here arrive months late, we never observe the counterfactual for merchants we decline, and &ldquo;exploration&rdquo; would mean deliberately approving merchants we believe are bad. Nothing in the loop above needs it &mdash; continuous memory update plus human feedback gets us the relearning behaviour without that machinery.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 5</span>Decisions taken</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Question</th><th>Decision</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Deliverable</td><td><strong>Demo / evaluation build</strong></td><td>Optimise for a visible, legible mechanism over production hardening.</td></tr>
+        <tr><td class="k">Data</td><td><strong>Synthetic corpus</strong></td><td>Authored merchant population with planted rings and drift cases &mdash; so we own the ground truth and the replay test is exactly measurable.</td></tr>
+        <tr><td class="k">Scope</td><td><strong>Onboarding + drift</strong></td><td>All three cases in scope. Buyer-side card fraud explicitly out &mdash; different system, sub-second budget.</td></tr>
+        <tr><td class="k">Authority</td><td><strong>Advisory copilot</strong></td><td>Evidence-first briefs; a human decides, corrects and confirms. Rationale and feedback capture is a feature, not an afterthought &mdash; it is the fast learning path in §4.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h4>Build sequence</h4>
+  <ol>
+    <li><strong>Author the corpus and resolve the graph.</strong> Measure recidivist-link recall on the planted rings &mdash; the cheapest proof the premise holds.</li>
+    <li><strong>The copilot.</strong> Assemble evidence, retrieve similar historical cases with outcomes, produce a brief &mdash; findings and precedent first, recommendation last, to counter automation bias. Capture the rationale.</li>
+    <li><strong>Drift.</strong> Re-observe merchant sites and fulfilment channels; alert when <code>observed_selling</code> diverges from <code>claims_to_sell</code> across a policy boundary.</li>
+    <li><strong>Continuous update, with a health check.</strong> Memory reconciles on every case and every piece of feedback. Periodically, replay confirmed outcomes over the historical decision set to confirm it is still improving without regressing &mdash; that chart is the anti-fragility claim.</li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 6</span>Working assumptions &mdash; every open question, answered</h2>
+  <p>Rather than block on founder input, every question is answered below with an assumed value so the build can proceed. <strong>All numbers in this section are assumed, not measured.</strong> They are chosen to be plausible for an MoR of Dodo&rsquo;s stage and stated explicitly so they can be corrected rather than debated in the abstract. Correct any of them and I will re-derive what depends on it.</p>
+
+  <h4>6.1 &nbsp;Assumed operating baseline</h4>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Quantity</th><th>Assumed</th><th>Quantity</th><th>Assumed</th></tr></thead>
+      <tbody>
+        <tr><td>Applications, lifetime</td><td class="k">4,000</td><td>Annualised volume processed</td><td class="k">$150M</td></tr>
+        <tr><td>Applications, current rate</td><td class="k">15 / day</td><td>Approval rate</td><td class="k">65%</td></tr>
+        <tr><td>Approved merchants</td><td class="k">2,600</td><td>Touched by a human</td><td class="k">40%</td></tr>
+        <tr><td>Active merchants</td><td class="k">1,900</td><td>Median time to decision</td><td class="k">14 hours</td></tr>
+        <tr><td>Confirmed-bad, lifetime</td><td class="k">45 &nbsp;<span class="chip c-warn">1.7% of approvals</span></td><td>Loss from admission failure</td><td class="k">~$350k / yr</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The one that shapes the architecture is <strong>45 confirmed-bad merchants</strong>. That is far below the roughly 200 labelled outcomes supervised learning would need, which settles the design: retrieval and precedent, not a trained classifier. If the real figure turns out to be in the hundreds, §3 gains a scoring model alongside the graph &mdash; it does not replace it.</p>
+
+  <h4>6.2 &nbsp;The operating point, derived</h4>
+  <div class="statement">
+    <span class="tag">Assumed cost ratio &mdash; sets every threshold in the system</span>
+    <p><strong>Wrongly approving one bad merchant &asymp; $25,000</strong> &mdash; refunds and chargebacks on volume processed before termination, dispute fees, scheme fines, staff time. Tail cases (a rights claim, regulatory contact) run into six figures; this is the median, not the worst.</p>
+    <p><strong>Wrongly declining one good merchant &asymp; $4,000</strong> &mdash; roughly 24 months of lifetime margin on a small SaaS or indie account, plus a reputational cost that is real in a community where founders write publicly about being debanked.</p>
+    <p>That is a ratio of about <strong>6 : 1</strong>, which puts the indifference point at <strong>P(bad) &asymp; 14%</strong>. We should decline only when we believe there is better than a one-in-seven chance the merchant is bad &mdash; and be willing to accept roughly six wrongful declines to prevent one wrongful approval. <em>That is far less paranoid than intuition suggests</em>, and it is the single most useful output of writing these assumptions down.</p>
+  </div>
+
+  <h4>6.3 &nbsp;Every question, with its assumed answer</h4>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>#</th><th>Question</th><th>Assumed for the build</th><th>If it is wrong</th></tr></thead>
+      <tbody>
+        <tr><td class="k">1</td><td>Cost ratio, wrong decline vs. wrong approve</td><td><strong>6 : 1</strong>, threshold at P(bad) &asymp; 14%</td><td>Every threshold moves. Re-derive §6.2 and nothing else.</td></tr>
+        <tr><td class="k">2</td><td>May facts from one merchant decide another?</td><td><strong>Yes</strong> &mdash; legitimate interest in fraud prevention, covered by merchant terms</td><td>Fatal. A shared context graph is the project; per-merchant silos would end it.</td></tr>
+        <tr><td class="k">3</td><td>Accept the §4 replay test as the anti-fragility definition?</td><td><strong>Yes</strong></td><td>We keep the loop, lose the acceptance test, and &ldquo;anti-fragile&rdquo; stays unmeasured.</td></tr>
+        <tr><td class="k">4</td><td>Shared MIDs? Current dispute ratio?</td><td><strong>Shared.</strong> Portfolio VAMP ratio &asymp; <strong>0.40%</strong> &mdash; under the 0.50% acquirer line, thin headroom, no active remediation</td><td>If above 0.50%, this stops being a build project and becomes an incident.</td></tr>
+        <tr><td class="k">5</td><td>Labelled historical outcomes?</td><td><strong>45</strong>, reasons recorded informally only</td><td>Above ~200, add a scoring model beside the graph.</td></tr>
+        <tr><td class="k">6</td><td>Will analysts write rationales?</td><td><strong>Yes, if it is one required field in the tool they already use</strong> &mdash; no, if it is a separate system</td><td>Design constraint, not a risk: rationale capture ships inside the decision action or not at all.</td></tr>
+        <tr><td class="k">7</td><td>What counts as ground truth?</td><td>Terminations split <strong>~55% policy, ~30% fraud, ~15% commercial</strong>. Only the 30% are fraud labels</td><td>Label with reason codes regardless &mdash; a single &ldquo;bad&rdquo; flag teaches the wrong lesson either way.</td></tr>
+        <tr><td class="k">8</td><td>Retention of founder identity for recidivism?</td><td><strong>7 years</strong> on adverse findings; erasure honoured for non-adverse records, refused for adverse</td><td>A shorter window blinds us to Case C beyond it. Set it before the first person node is written.</td></tr>
+        <tr><td class="k">9</td><td>Do we owe a declined merchant a reason?</td><td><strong>Category-level reason, never the specific signal</strong>, with an appeal channel</td><td>If specificity is legally required, expect faster adversarial adaptation and shorter signal half-life.</td></tr>
+        <tr><td class="k">10</td><td>Is country of incorporation an acceptable input?</td><td><strong>Yes, but never sole-factor</strong>, with approval rate by region as a standing metric</td><td>If disallowed, drop the feature; the graph carries most of that signal anyway.</td></tr>
+        <tr><td class="k">11</td><td>Ranked losses over the last 12 months</td><td>Deceptive billing <strong>35%</strong> &middot; drift <strong>20%</strong> &middot; illegality/IP <strong>15%</strong> &middot; insolvency <strong>12%</strong> &middot; rings <strong>8%</strong> &middot; laundering <strong>5%</strong> &middot; ATO <strong>3%</strong> &middot; card testing <strong>2%</strong></td><td><span class="chip c-bad">softest assumption here</span> Real data almost certainly reorders this, and the build order follows it.</td></tr>
+        <tr><td class="k">12</td><td>Unfulfilled prepaid balance tracked?</td><td><strong>No, and no reserves held.</strong> Estimated exposure <strong>~$22M</strong> &mdash; about 15% of annual volume</td><td>If reserves already exist, insolvency drops down the priority list.</td></tr>
+        <tr><td class="k">13</td><td>Cancellation flows reviewed at underwriting?</td><td><strong>No</strong>, and not re-checked afterwards</td><td>If already reviewed, the largest assumed loss category is already controlled.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Two of these carry most of the risk of being wrong. <strong>Number 11</strong> is close to a guess &mdash; it is ordered by what the literature says is dangerous, not by Dodo&rsquo;s books, and one afternoon with the real numbers would beat all of my reasoning. <strong>Number 12</strong> produces the largest figure in this document from the thinnest evidence: if roughly a third of merchants sell annual plans and are on average halfway through their term, the unfulfilled obligation Dodo would inherit on their failure is around $22M. Even at half that, it dwarfs the assumed $350k annual fraud loss &mdash; which suggests the biggest exposure here may not be fraud at all.</p>
+</section>
+
+<section>
+  <h2><span class="sn">&sect; 7</span>Structural assumptions &mdash; correct these first</h2>
+  <div class="assume"><span class="id">A-1</span><div>Merchants transact under Dodo's MIDs, so dispute ratios aggregate at platform level. See question 4.</div></div>
+  <div class="assume"><span class="id">A-2</span><div>Onboarding is substantially manual today, and rationales are not captured in structured form.</div></div>
+  <div class="assume"><span class="id">A-3</span><div>Dodo's published merchant acceptance policy &mdash; accepted, restricted, prohibited &mdash; is the authoritative taxonomy we classify against.</div></div>
+  <div class="assume"><span class="id">A-4</span><div>Continuously crawling merchant sites and public fulfilment channels is contractually acceptable. Drift detection is not buildable otherwise.</div></div>
+  <div class="assume"><span class="id">A-5</span><div>Seconds-to-minutes decision latency is acceptable; this is not an inline checkout path.</div></div>
+  <div class="assume"><span class="id">A-6</span><div>Transaction, refund, payout and login telemetry can be fed into the same graph. §2.1 shows half the risk taxonomy is invisible without it.</div></div>
+</section>
+
+<footer>
+  <p>Diagrams: <a href="https://claude.ai/code/artifact/2cb36867-64f4-4800-b371-189d48876f2a">Merchant Risk Pipeline</a> &mdash; the broken loop, the case timeline, the end-to-end flow and the memory update lifecycle. Sources: <a href="https://docs.dodopayments.com/miscellaneous/merchant-acceptance">Dodo Payments Merchant Acceptance Policy</a> &middot; <a href="https://docs.mem0.ai/cookbooks/essentials/choosing-memory-architecture-vector-vs-graph">Mem0 &mdash; vector vs. graph memory</a>. Case and merchant names in §2 and §3 are illustrative composites.</p>
+</footer>
+
+</div>

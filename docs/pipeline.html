@@ -1,0 +1,462 @@
+<title>Merchant Risk Pipeline</title>
+<style>
+:root{
+  --paper:#F5F6F8; --surface:#FFFFFF; --surface-2:#EDEFF3;
+  --ink:#14161C; --ink-2:#3C4252; --muted:#5A6072; --faint:#878EA0;
+  --rule:#DFE2E9; --rule-2:#C9CFDA;
+  --accent:#3B3FA8; --accent-soft:#E8E9F8; --accent-line:#B9BBEA;
+  --sig:#A3302B; --sig-soft:#F6E3E1;
+  --ok:#2F6B4F; --ok-bg:#E4EFE9;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0E1016; --surface:#171A22; --surface-2:#1E222C;
+  --ink:#E6E8EE; --ink-2:#C2C7D4; --muted:#969DB0; --faint:#767E92;
+  --rule:#262B36; --rule-2:#333A48;
+  --accent:#9296F2; --accent-soft:#1C1F35; --accent-line:#3A3E70;
+  --sig:#E68078; --sig-soft:#2C1715; --ok:#6FBF95; --ok-bg:#14241C;
+}}
+:root[data-theme="dark"]{
+  --paper:#0E1016; --surface:#171A22; --surface-2:#1E222C;
+  --ink:#E6E8EE; --ink-2:#C2C7D4; --muted:#969DB0; --faint:#767E92;
+  --rule:#262B36; --rule-2:#333A48;
+  --accent:#9296F2; --accent-soft:#1C1F35; --accent-line:#3A3E70;
+  --sig:#E68078; --sig-soft:#2C1715; --ok:#6FBF95; --ok-bg:#14241C;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:15.5px;line-height:1.58;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1000px;margin:0 auto;padding:0 28px 72px;}
+
+.mast{padding:52px 0 18px;border-bottom:1px solid var(--rule);}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,46px);line-height:1.06;
+  letter-spacing:-.015em;margin:12px 0 0;text-wrap:balance;}
+.dek{font-family:var(--serif);font-size:18px;line-height:1.48;color:var(--ink-2);max-width:62ch;margin:14px 0 0;text-wrap:pretty;}
+
+section{margin:38px 0 0;}
+h2{font-family:var(--serif);font-weight:400;font-size:23px;line-height:1.2;margin:0 0 8px;text-wrap:balance;}
+h2 .sn{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent);display:block;margin-bottom:6px;}
+p{margin:0 0 12px;max-width:72ch;text-wrap:pretty;}
+strong{font-weight:650}
+code{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 5px;border-radius:3px;color:var(--ink-2);}
+a{color:var(--accent)}
+
+figure{margin:16px 0 0}
+figure svg{display:block;width:100%;height:auto}
+.figbox{background:var(--surface);border:1px solid var(--rule);border-radius:5px;padding:18px 16px 12px;overflow-x:auto;}
+.figbox svg{min-width:640px}
+figcaption{font-size:13.5px;color:var(--muted);margin-top:11px;max-width:76ch;line-height:1.5}
+figcaption b{color:var(--ink-2);font-weight:650}
+
+.legend{display:flex;flex-wrap:wrap;gap:18px;margin:14px 0 0;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+.legend span{display:flex;align-items:center;gap:7px}
+.legend i{width:15px;height:3px;border-radius:2px;display:block}
+
+footer{border-top:1px solid var(--rule);margin-top:44px;padding-top:16px;font-size:12.5px;color:var(--muted);}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Dodo Payments &middot; Risk &amp; Compliance &middot; Companion to the problem statement</div>
+  <h1>Merchant Risk Pipeline</h1>
+  <p class="dek">Five pictures: the loop that is broken today, the three ways merchants go wrong and how long each takes to surface, the end-to-end system we are proposing to build, how the memory keeps updating itself once it is running, and the wider risk taxonomy that shows what the pipeline still cannot see.</p>
+</header>
+
+<!-- ============ FIG 1 ============ -->
+<section>
+  <h2><span class="sn">Figure 1</span>The problem: a loop that never closes</h2>
+  <p>Dodo decides, the merchant trades, and months later an outcome arrives &mdash; a chargeback, a rights claim, a termination. That outcome never travels back to the decision that caused it. The reasoning behind the original call was never written down, so there is nothing for it to travel back <em>to</em>.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 215" role="img" aria-label="Two panels. Today: application, decision, merchant and outcome form a chain, and the return path from outcome back to decision is severed and labelled never returns. Proposed: the same chain, with the return path running through a memory store and a replay gate.">
+        <defs>
+          <marker id="f1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="f1s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+          <marker id="f1k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+        </defs>
+
+        <rect x="10" y="14" width="477" height="192" rx="6" fill="none" stroke="currentColor" stroke-opacity=".2"/>
+        <rect x="513" y="14" width="477" height="192" rx="6" fill="none" stroke="var(--accent)" stroke-opacity=".45"/>
+        <text x="28" y="40" font-family="ui-monospace,Menlo,monospace" font-size="10.5" letter-spacing="1.4" fill="var(--sig)">TODAY</text>
+        <text x="531" y="40" font-family="ui-monospace,Menlo,monospace" font-size="10.5" letter-spacing="1.4" fill="var(--accent)">PROPOSED</text>
+
+        <!-- LEFT -->
+        <g fill="none" stroke="currentColor" stroke-opacity=".45">
+          <rect x="40" y="58" width="110" height="44" rx="4"/><rect x="190" y="58" width="110" height="44" rx="4"/><rect x="340" y="58" width="110" height="44" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="95" y="79">Decision</text><text x="245" y="79">Merchant</text><text x="395" y="79">Outcome</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="95" y="93">NO RATIONALE KEPT</text><text x="245" y="93">TRADES</text><text x="395" y="93">CHARGEBACK, CLAIM</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".45" fill="none" marker-end="url(#f1a)">
+          <path d="M150,80 L184,80"/><path d="M300,80 L334,80"/>
+        </g>
+        <path d="M395,102 L395,152 L95,152 L95,108" fill="none" stroke="var(--sig)" stroke-opacity=".8" stroke-dasharray="5 4"/>
+        <g stroke="var(--sig)" stroke-width="1.8"><path d="M238,144 L252,160"/><path d="M252,144 L238,160"/></g>
+        <text x="245" y="182" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" fill="var(--sig)">NEVER RETURNS</text>
+
+        <!-- RIGHT -->
+        <g fill="none" stroke="currentColor" stroke-opacity=".45">
+          <rect x="543" y="58" width="110" height="44" rx="4"/><rect x="693" y="58" width="110" height="44" rx="4"/><rect x="843" y="58" width="110" height="44" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="598" y="79">Decision</text><text x="748" y="79">Merchant</text><text x="898" y="79">Outcome</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="598" y="93">+ RATIONALE</text><text x="748" y="93">MONITORED</text><text x="898" y="93">CHARGEBACK, CLAIM</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".45" fill="none" marker-end="url(#f1a)">
+          <path d="M653,80 L687,80"/><path d="M803,80 L837,80"/>
+        </g>
+        <rect x="668" y="138" width="160" height="42" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".7"/>
+        <text x="748" y="155" text-anchor="middle" font-size="12" fill="var(--accent)">Memory + replay gate</text>
+        <text x="748" y="169" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="var(--accent)">PROMOTE IF IT IMPROVES</text>
+        <path d="M898,102 L898,159 L836,159" fill="none" stroke="var(--accent)" marker-end="url(#f1k)"/>
+        <path d="M668,159 L598,159 L598,108" fill="none" stroke="var(--accent)" marker-end="url(#f1k)"/>
+      </svg>
+    </div>
+    <figcaption><b>The single structural change.</b> Everything else in this document follows from closing that return path. The gate matters as much as the loop: without it, every incident makes the system more paranoid and the approval rate quietly collapses &mdash; which for a merchant-of-record is its own kind of failure.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 2 ============ -->
+<section>
+  <h2><span class="sn">Figure 2</span>The three cases, and how long each stays invisible</h2>
+  <p>Two of the three are fully knowable on day one &mdash; the evidence exists at intake, and we simply do not look for it or cannot retrieve it. The third is not knowable at intake at any price, because the merchant was honest when we underwrote them. That distinction decides where engineering effort goes.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 400" role="img" aria-label="A timeline in days for three merchant failure cases. Case A rights: risk present at day 0, detected day 74 today, detectable at day 0 with memory. Case B drift: risk begins day 150, detected day 180 today, day 152 with monitoring. Case C recidivism: risk present at day 0, often never detected today, detectable at day 0 with the graph.">
+        <defs>
+          <marker id="f2s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+
+        <text x="20" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.2" fill="var(--sig)">TODAY &mdash; EXPOSURE WINDOW</text>
+        <text x="330" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.2" fill="var(--accent)">WITH THE MEMORY LAYER</text>
+
+        <!-- track lines -->
+        <g stroke="currentColor" stroke-opacity=".16">
+          <line x1="120" y1="82" x2="950" y2="82"/><line x1="120" y1="106" x2="950" y2="106"/>
+          <line x1="120" y1="182" x2="950" y2="182"/><line x1="120" y1="206" x2="950" y2="206"/>
+          <line x1="120" y1="282" x2="950" y2="282"/><line x1="120" y1="306" x2="950" y2="306"/>
+        </g>
+
+        <!-- CASE A -->
+        <text x="20" y="66" font-size="12.5" fill="currentColor">Case A &mdash; rights</text>
+        <text x="20" y="80" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">PIRATED CATALOGUE</text>
+        <rect x="120" y="77" width="307" height="10" rx="2" fill="var(--sig)" fill-opacity=".26"/>
+        <rect x="118" y="72" width="4" height="20" fill="var(--sig)"/>
+        <circle cx="427" cy="82" r="5" fill="none" stroke="var(--sig)" stroke-width="1.8"/>
+        <text x="437" y="86" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)">DAY 74 &mdash; PUBLISHER&rsquo;S COUNSEL WRITES TO DODO</text>
+        <circle cx="120" cy="106" r="5" fill="var(--accent)"/>
+        <text x="132" y="110" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">DAY 0 &mdash; NO LICENCES ON FILE; TERMS PAGE MATCHES A TERMINATED MERCHANT</text>
+
+        <!-- CASE B -->
+        <text x="20" y="166" font-size="12.5" fill="currentColor">Case B &mdash; drift</text>
+        <text x="20" y="180" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">PIVOT AFTER APPROVAL</text>
+        <rect x="742" y="177" width="125" height="10" rx="2" fill="var(--sig)" fill-opacity=".26"/>
+        <rect x="740" y="172" width="4" height="20" fill="var(--sig)"/>
+        <circle cx="867" cy="182" r="5" fill="none" stroke="var(--sig)" stroke-width="1.8"/>
+        <text x="877" y="186" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)" transform="translate(0,-16)">DAY 180 &mdash; THE CHARGEBACK IS THE ALERT</text>
+        <circle cx="751" cy="206" r="5" fill="var(--accent)"/>
+        <text x="741" y="210" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">DAY 152 &mdash; SITE DIFF CROSSES A POLICY BOUNDARY</text>
+        <text x="746" y="238" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="currentColor" fill-opacity=".5">RISK BEGINS HERE &mdash; NOT KNOWABLE AT INTAKE</text>
+
+        <!-- CASE C -->
+        <text x="20" y="266" font-size="12.5" fill="currentColor">Case C &mdash; ring</text>
+        <text x="20" y="280" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">TERMINATED, REAPPLIED</text>
+        <rect x="120" y="277" width="810" height="10" rx="2" fill="var(--sig)" fill-opacity=".26"/>
+        <rect x="118" y="272" width="4" height="20" fill="var(--sig)"/>
+        <path d="M930,282 L960,282" stroke="var(--sig)" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#f2s)" fill="none"/>
+        <text x="640" y="268" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)">OFTEN NEVER DETECTED &mdash; UNTIL THE NEXT TERMINATION</text>
+        <circle cx="120" cy="306" r="5" fill="var(--accent)"/>
+        <text x="132" y="310" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">DAY 0 &mdash; TWO HOPS TO A MERCHANT WE ALREADY TERMINATED</text>
+
+        <!-- axis -->
+        <line x1="120" y1="348" x2="950" y2="348" stroke="currentColor" stroke-opacity=".35"/>
+        <g stroke="currentColor" stroke-opacity=".35">
+          <line x1="120" y1="348" x2="120" y2="354"/><line x1="244" y1="348" x2="244" y2="354"/>
+          <line x1="369" y1="348" x2="369" y2="354"/><line x1="493" y1="348" x2="493" y2="354"/>
+          <line x1="618" y1="348" x2="618" y2="354"/><line x1="742" y1="348" x2="742" y2="354"/>
+          <line x1="867" y1="348" x2="867" y2="354"/>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="currentColor" fill-opacity=".55">
+          <text x="120" y="370">DAY 0</text><text x="244" y="370">30</text><text x="369" y="370">60</text>
+          <text x="493" y="370">90</text><text x="618" y="370">120</text><text x="742" y="370">150</text><text x="867" y="370">180</text>
+        </g>
+        <text x="120" y="390" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="currentColor" fill-opacity=".45">UNDERWRITING DECISION</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--sig);opacity:.4"></i>Exposure window today</span>
+      <span><i style="background:var(--sig)"></i>Risk begins</span>
+      <span><i style="background:var(--accent);border-radius:50%;width:9px;height:9px"></i>Detection with the memory layer</span>
+    </div>
+    <figcaption><b>The shaded bars are the money.</b> Cases A and C collapse to day zero because the evidence already exists at intake &mdash; retrieval and graph traversal, not prediction. Case B cannot collapse to zero at any price, because the merchant was telling the truth when we underwrote them; the win there is 28 days of lead time, bought by continuously reconciling what they claim to sell against what they are observed selling.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 3 ============ -->
+<section>
+  <h2><span class="sn">Figure 3</span>The end-to-end pipeline</h2>
+  <p>Three loops run at different speeds against one shared memory. <strong>Intake</strong> runs per application in seconds to minutes. <strong>Lifecycle</strong> runs continuously per active merchant. <strong>Learning</strong> runs at two speeds &mdash; feedback from the case in front of you writes to memory immediately, while confirmed outcomes arrive months later. The memory layer in the middle is what makes them one system rather than three tools.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 620" role="img" aria-label="An end-to-end pipeline. An intake row runs from application through evidence collection, fact extraction, entity resolution, precedent retrieval and case brief. It writes to and reads from a central memory layer holding the context graph, case memory and policy taxonomy. Below, a lifecycle row re-observes merchants and diffs claimed against observed offerings, raising drift alerts. A learning row turns confirmed outcomes into candidate memories that pass a replay gate before promotion.">
+        <defs>
+          <marker id="f3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="f3k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+          <marker id="f3s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+
+        <!-- ROW A : INTAKE -->
+        <text x="20" y="42" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">1 &middot; INTAKE &mdash; PER APPLICATION, SECONDS TO MINUTES</text>
+        <g fill="var(--surface)" stroke="currentColor" stroke-opacity=".42">
+          <rect x="20" y="58" width="140" height="54" rx="4"/><rect x="178" y="58" width="140" height="54" rx="4"/>
+          <rect x="336" y="58" width="140" height="54" rx="4"/><rect x="494" y="58" width="140" height="54" rx="4"/>
+          <rect x="652" y="58" width="140" height="54" rx="4"/><rect x="810" y="58" width="140" height="54" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="90" y="82">Application</text><text x="248" y="82">Evidence</text><text x="406" y="82">Fact extraction</text>
+          <text x="564" y="82">Entity resolution</text><text x="722" y="82">Precedent</text><text x="880" y="82">Case brief</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="90" y="98">FORM, DOCS, URL</text><text x="248" y="98">CRAWL, KYB, WHOIS</text><text x="406" y="98">LLM &rarr; ATOMIC FACTS</text>
+          <text x="564" y="98">DEDUPE, LINK</text><text x="722" y="98">N-HOP + SEMANTIC</text><text x="880" y="98">HUMAN DECIDES + CORRECTS</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".42" fill="none" marker-end="url(#f3a)">
+          <path d="M160,85 L172,85"/><path d="M318,85 L330,85"/><path d="M476,85 L488,85"/><path d="M634,85 L646,85"/><path d="M792,85 L804,85"/>
+        </g>
+
+        <!-- vertical links A <-> B -->
+        <g fill="none" marker-end="url(#f3k)" stroke="var(--accent)">
+          <path d="M564,112 L564,194"/><path d="M722,194 L722,112"/><path d="M880,112 L880,194"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)">
+          <text x="572" y="140">upsert entities</text>
+          <text x="730" y="140">read precedent</text>
+          <text x="872" y="176" text-anchor="end">write decision, rationale + feedback</text>
+        </g>
+
+        <!-- ROW B : MEMORY -->
+        <text x="20" y="186" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">2 &middot; THE MEMORY LAYER &mdash; SHARED, VERSIONED, PROVENANCE-BEARING</text>
+        <rect x="20" y="198" width="930" height="118" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".55"/>
+        <g fill="var(--surface)" stroke="var(--accent)" stroke-opacity=".45">
+          <rect x="36" y="228" width="288" height="68" rx="4"/><rect x="340" y="228" width="288" height="68" rx="4"/><rect x="644" y="228" width="288" height="68" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="13" fill="currentColor">
+          <text x="180" y="254">Context graph</text><text x="484" y="254">Case memory</text><text x="788" y="254">Policy taxonomy</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="9" fill="currentColor" fill-opacity=".6">
+          <text x="180" y="272">MERCHANTS &middot; PEOPLE &middot; DOMAINS</text><text x="180" y="286">PAYOUT &middot; CHANNELS &middot; OFFERINGS</text>
+          <text x="484" y="272">EPISODIC: WHAT HAPPENED</text><text x="484" y="286">ADD / UPDATE / INVALIDATE</text>
+          <text x="788" y="272">ACCEPTED / RESTRICTED</text><text x="788" y="286">PROHIBITED &middot; DODO POLICY</text>
+        </g>
+
+        <!-- ROW C : LIFECYCLE -->
+        <text x="20" y="386" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--sig)">3 &middot; LIFECYCLE &mdash; PER ACTIVE MERCHANT, CONTINUOUS</text>
+        <g fill="var(--surface)" stroke="var(--sig)" stroke-opacity=".5">
+          <rect x="20" y="398" width="140" height="54" rx="4"/><rect x="178" y="398" width="140" height="54" rx="4"/><rect x="336" y="398" width="140" height="54" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="90" y="422">Re-observe</text><text x="248" y="422">Reconcile</text><text x="406" y="422">Drift alert</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="90" y="438">SITE, OFFERINGS, DISCORD</text><text x="248" y="438">CLAIMED VS OBSERVED</text><text x="406" y="438">&rarr; RE-REVIEW</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".42" fill="none" marker-end="url(#f3a)">
+          <path d="M160,425 L172,425"/><path d="M318,425 L330,425"/>
+        </g>
+        <g fill="none" stroke="var(--sig)" marker-end="url(#f3s)">
+          <path d="M90,316 L90,398"/><path d="M248,398 L248,316"/><path d="M406,398 L406,316"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--sig)">
+          <text x="98" y="346">underwriting snapshot</text>
+          <text x="256" y="346">observed offerings</text>
+          <text x="414" y="376">incident</text>
+        </g>
+
+        <!-- ROW D : LEARNING -->
+        <text x="494" y="518" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">4 &middot; SLOW PATH &mdash; ON CONFIRMED OUTCOME, MONTHS</text>
+        <g fill="var(--surface)" stroke="var(--accent)" stroke-opacity=".5">
+          <rect x="494" y="530" width="140" height="54" rx="4"/><rect x="652" y="530" width="140" height="54" rx="4"/><rect x="810" y="530" width="140" height="54" rx="4"/>
+        </g>
+        <g text-anchor="middle" font-size="12" fill="currentColor">
+          <text x="564" y="554">Outcome</text><text x="722" y="554">Distil</text><text x="880" y="554">Replay gate</text>
+        </g>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="564" y="570">CLAIM, DISPUTE, EXIT</text><text x="722" y="570">CANDIDATE MEMORY</text><text x="880" y="570">IMPROVE? REGRESS?</text>
+        </g>
+        <g stroke="currentColor" stroke-opacity=".42" fill="none" marker-end="url(#f3a)">
+          <path d="M634,557 L646,557"/><path d="M792,557 L804,557"/>
+        </g>
+        <g fill="none" stroke="var(--accent)" marker-end="url(#f3k)">
+          <path d="M850,316 L850,530"/><path d="M920,530 L920,316"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="9.5" fill="var(--accent)" text-anchor="end">
+          <text x="842" y="400">replay over history</text>
+          <text x="912" y="440">promote if it improves</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Read the vertical arrows, not the horizontal ones.</b> The left-to-right chains are ordinary processing. What makes this a memory layer rather than a scoring service is that every lane writes evidence into the same store and reads judgement back out of it &mdash; so a fact learned while monitoring one merchant in lane 3 is available to a decision about a different applicant in lane 1, minutes later. The replay gate on the far right is the only path by which a distilled pattern reaches the live decision policy, and it is what makes an incident strengthen the system instead of merely alarming it.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 4 ============ -->
+<section>
+  <h2><span class="sn">Figure 4</span>How the memory updates itself</h2>
+  <p>This is the mechanism that makes the layer keep learning day to day. Every case conversation and every correction an analyst makes is extracted into atomic facts and reconciled against what memory already holds &mdash; not appended, reconciled. The next case reads the updated memory minutes later. <strong>There is no training step and nothing to schedule.</strong> The memory improves as a side effect of being used.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 360" role="img" aria-label="Three inputs - case conversations, manual analyst feedback, and confirmed outcomes - feed fact extraction, then reconciliation against existing memory, which resolves to one of four actions: add, update, invalidate or no-op. The updated memory is available to the next case immediately, with no retraining step.">
+        <defs>
+          <marker id="f4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+          <marker id="f4k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+          <marker id="f4s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--sig)"/></marker>
+        </defs>
+
+        <text x="20" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="currentColor" fill-opacity=".55">WHAT WRITES TO MEMORY</text>
+        <text x="712" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="var(--accent)">HOW MEMORY RESOLVES IT</text>
+
+        <g fill="var(--surface)" stroke="currentColor" stroke-opacity=".42">
+          <rect x="20" y="44" width="180" height="56" rx="4"/><rect x="20" y="124" width="180" height="56" rx="4"/><rect x="20" y="204" width="180" height="56" rx="4"/>
+          <rect x="250" y="124" width="170" height="56" rx="4"/>
+        </g>
+        <rect x="470" y="124" width="190" height="56" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".7"/>
+
+        <g text-anchor="middle" font-size="12.5" fill="currentColor">
+          <text x="110" y="68">Case conversation</text><text x="110" y="148">Manual feedback</text><text x="110" y="228">Confirmed outcome</text>
+          <text x="335" y="148">Extract facts</text>
+        </g>
+        <text x="565" y="148" text-anchor="middle" font-size="12.5" fill="var(--accent)">Reconcile vs. memory</text>
+        <g text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="currentColor" fill-opacity=".55">
+          <text x="110" y="84">EVERY CASE, EVERY DAY</text><text x="110" y="164">ANALYST CORRECTS OR CONFIRMS</text><text x="110" y="244">TERMINATION, CLAIM &middot; MONTHS</text>
+          <text x="335" y="164">ATOMIC &middot; WITH PROVENANCE</text>
+        </g>
+        <text x="565" y="164" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="8.5" fill="var(--accent)">NOT APPENDED &mdash; RECONCILED</text>
+
+        <g fill="none" stroke="currentColor" stroke-opacity=".42" marker-end="url(#f4a)">
+          <path d="M200,72 C226,72 226,140 244,140"/><path d="M200,152 L244,152"/><path d="M200,232 C226,232 226,166 244,166"/>
+        </g>
+        <path d="M420,152 L464,152" fill="none" stroke="var(--accent)" marker-end="url(#f4k)"/>
+
+        <g fill="var(--surface)">
+          <rect x="712" y="36" width="256" height="50" rx="4" stroke="var(--accent)" stroke-opacity=".6"/>
+          <rect x="712" y="96" width="256" height="50" rx="4" stroke="var(--accent)" stroke-opacity=".6"/>
+          <rect x="712" y="156" width="256" height="50" rx="4" stroke="var(--sig)" stroke-opacity=".6"/>
+          <rect x="712" y="216" width="256" height="50" rx="4" stroke="currentColor" stroke-opacity=".3"/>
+        </g>
+        <g font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.2">
+          <text x="730" y="60" fill="var(--accent)">ADD</text><text x="730" y="120" fill="var(--accent)">UPDATE</text>
+          <text x="730" y="180" fill="var(--sig)">INVALIDATE</text><text x="730" y="240" fill="currentColor" fill-opacity=".5">NO-OP</text>
+        </g>
+        <g font-size="11.5" fill="currentColor" fill-opacity=".72">
+          <text x="730" y="76">a fact we did not hold</text><text x="730" y="136">refines scope or confidence</text>
+          <text x="730" y="196">supersedes what it contradicts</text><text x="730" y="256">already known &mdash; nothing changes</text>
+        </g>
+
+        <g fill="none" stroke="var(--accent)" stroke-opacity=".7" marker-end="url(#f4k)">
+          <path d="M660,140 C686,140 686,61 706,61"/><path d="M660,146 C686,146 686,121 706,121"/>
+        </g>
+        <path d="M660,158 C686,158 686,181 706,181" fill="none" stroke="var(--sig)" stroke-opacity=".7" marker-end="url(#f4s)"/>
+        <path d="M660,164 C686,164 686,241 706,241" fill="none" stroke="currentColor" stroke-opacity=".3" marker-end="url(#f4a)"/>
+
+        <path d="M840,266 L840,316 L110,316 L110,106" fill="none" stroke="var(--accent)" stroke-opacity=".7" marker-end="url(#f4k)"/>
+        <text x="475" y="308" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing=".8" fill="var(--accent)">AVAILABLE TO THE NEXT CASE IMMEDIATELY &mdash; NO RETRAINING STEP</text>
+      </svg>
+    </div>
+    <figcaption><b>Reconciled, not appended.</b> The four outcomes on the right are what separate a memory layer from a log. <span style="color:var(--sig)">INVALIDATE</span> is the one that does the real work and the one that carries the risk: a fact written with false confidence propagates into every future decision and is far harder to spot than a bad one-off judgement. That is why every memory carries provenance and supersedes rather than overwrites &mdash; so any past decision can be reconstructed against the memory as it stood at the time, and a poisoned fact can be traced and rolled back.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ FIG 5 ============ -->
+<section>
+  <h2><span class="sn">Figure 5</span>The wider risk taxonomy &mdash; and where we are blind</h2>
+  <p>The three cases in Figure 2 came from worked examples, not a systematic sweep. Reading across acquirer-side fraud literature, Visa&rsquo;s monitoring rules and current FTC enforcement, they turn out to sit in only two of <strong>four postures</strong> a merchant can take. The other two are not adversarial at all &mdash; and the pipeline as drawn cannot see them, because everything it collects is <em>content</em>: crawl the site, extract facts, diff the offering. That catches a merchant lying or drifting. It is blind to one that is failing or being attacked.</p>
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 1000 615" role="img" aria-label="Four panels describing merchant risk postures. Deceiving us: undisclosed illegality, recidivist rings, transaction laundering, merchant identity fraud, bust-out. Drifting from us: product drift, deceptive billing, AI abuse-control decay. Failing: insolvency with prepaid obligations, concentration. Being attacked: account takeover with payout redirection, card testing on the merchant checkout. The last two postures are entirely uncovered by the proposed pipeline.">
+        <defs>
+          <marker id="f5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="currentColor"/></marker>
+        </defs>
+        <text x="20" y="26" font-family="ui-monospace,Menlo,monospace" font-size="10" letter-spacing="1.3" fill="currentColor" fill-opacity=".55">FOUR POSTURES A MERCHANT CAN TAKE &mdash; EACH NEEDS A DIFFERENT SIGNAL</text>
+
+        <rect x="20" y="50" width="470" height="262" rx="6" fill="none" stroke="var(--accent)" stroke-opacity=".5"/>
+        <rect x="510" y="50" width="470" height="262" rx="6" fill="none" stroke="var(--accent)" stroke-opacity=".5"/>
+        <rect x="20" y="332" width="470" height="262" rx="6" fill="var(--sig-soft)" fill-opacity=".5" stroke="var(--sig)" stroke-opacity=".6"/>
+        <rect x="510" y="332" width="470" height="262" rx="6" fill="var(--sig-soft)" fill-opacity=".5" stroke="var(--sig)" stroke-opacity=".6"/>
+
+        <!-- P1 -->
+        <text x="42" y="82" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--accent)">DECEIVING US</text>
+        <text x="42" y="100" font-size="11.5" fill="currentColor" fill-opacity=".6">Adversarial from day one</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="48" cy="128" r="4" fill="var(--accent)"/><text x="64" y="132">Undisclosed illegality &mdash; the rights case <tspan fill-opacity=".5">(A)</tspan></text>
+          <circle cx="48" cy="154" r="4" fill="var(--accent)"/><text x="64" y="158">Recidivist ring, nominee directors <tspan fill-opacity=".5">(C)</tspan></text>
+          <circle cx="48" cy="180" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="184">Transaction laundering &mdash; fronting another business</text>
+          <circle cx="48" cy="206" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="210">Merchant identity fraud &mdash; a real firm&rsquo;s papers</text>
+          <circle cx="48" cy="232" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="236">Bust-out &mdash; ramp volume, vanish before disputes</text>
+        </g>
+        <line x1="42" y1="256" x2="468" y2="256" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="42" y="278" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="42" y="296" font-size="11.5" fill="currentColor" fill-opacity=".75">Context graph + transaction pattern vs. underwritten forecast</text>
+
+        <!-- P2 -->
+        <text x="532" y="82" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--accent)">DRIFTING FROM US</text>
+        <text x="532" y="100" font-size="11.5" fill="currentColor" fill-opacity=".6">Honest at intake, diverges later</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="538" cy="128" r="4" fill="var(--accent)"/><text x="554" y="132">Product drift into a prohibited category <tspan fill-opacity=".5">(B)</tspan></text>
+          <circle cx="538" cy="154" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="158">Deceptive billing &mdash; hard-to-cancel, auto-renewal</text>
+          <circle cx="538" cy="180" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="184">AI abuse controls decaying after launch</text>
+        </g>
+        <line x1="532" y1="256" x2="958" y2="256" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="532" y="278" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="532" y="296" font-size="11.5" fill="currentColor" fill-opacity=".75">Content diff + refund and dispute velocity</text>
+
+        <!-- P3 -->
+        <text x="42" y="364" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--sig)">FAILING</text>
+        <text x="42" y="382" font-size="11.5" fill="currentColor" fill-opacity=".6">No bad actor at all &mdash; and no coverage today</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="48" cy="410" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="414">Insolvency with prepaid annual subscriptions</text>
+          <circle cx="48" cy="436" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="64" y="440">Concentration &mdash; one merchant, too much volume</text>
+        </g>
+        <text x="64" y="472" font-size="11.5" fill="var(--sig)">An honest merchant goes bust owing twelve months</text>
+        <text x="64" y="490" font-size="11.5" fill="var(--sig)">of service. The refunds land on Dodo.</text>
+        <line x1="42" y1="538" x2="468" y2="538" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="42" y="560" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="42" y="578" font-size="11.5" fill="currentColor" fill-opacity=".75">Unfulfilled prepaid balance tracked per merchant</text>
+
+        <!-- P4 -->
+        <text x="532" y="364" font-family="ui-monospace,Menlo,monospace" font-size="11" letter-spacing="1.4" fill="var(--sig)">BEING ATTACKED</text>
+        <text x="532" y="382" font-size="11.5" fill="currentColor" fill-opacity=".6">The merchant is the victim &mdash; and no coverage today</text>
+        <g font-size="12.5" fill="currentColor">
+          <circle cx="538" cy="410" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="414">Account takeover &rarr; payout details redirected</text>
+          <circle cx="538" cy="436" r="4" fill="none" stroke="var(--sig)" stroke-width="1.6"/><text x="554" y="440">Card testing run through their checkout</text>
+        </g>
+        <text x="554" y="472" font-size="11.5" fill="var(--sig)">Assessing the business tells you nothing here.</text>
+        <text x="554" y="490" font-size="11.5" fill="var(--sig)">The business is fine. The account is not.</text>
+        <line x1="532" y1="538" x2="958" y2="538" stroke="currentColor" stroke-opacity=".18"/>
+        <text x="532" y="560" font-family="ui-monospace,Menlo,monospace" font-size="9.5" letter-spacing="1" fill="currentColor" fill-opacity=".5">NEEDS</text>
+        <text x="532" y="578" font-size="11.5" fill="currentColor" fill-opacity=".75">Account behaviour &mdash; logins, payout changes, velocity</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--accent);border-radius:50%;width:9px;height:9px"></i>Covered by the pipeline as drawn</span>
+      <span><i style="border:1.6px solid var(--sig);background:none;border-radius:50%;width:9px;height:9px"></i>Not covered &mdash; needs a signal we do not collect</span>
+    </div>
+    <figcaption><b>Eight of twelve are uncovered, and the pattern is not random.</b> Every gap is a <em>financial or behavioural</em> signal rather than a content one &mdash; volume against forecast, dispute velocity, payout-detail changes, unfulfilled prepaid balance. The fix is one more input lane into the same context graph, not a second system. Two gaps deserve naming out loud: <b>deceptive billing</b> is probably the highest-probability risk in Dodo&rsquo;s actual customer base, since the merchant and product are entirely real and only the cancellation flow offends &mdash; and the FTC has pursued a merchant of record directly on those grounds. And <b>insolvency</b> is not fraud at all, so no amount of fraud detection will ever surface it.</figcaption>
+  </figure>
+</section>
+
+<footer>
+  <p>Companion to the <a href="https://claude.ai/code/artifact/9fc54cd8-b756-4a8c-8ac4-9f46379c935f">Merchant Risk Memory problem statement</a> &middot; Anushika &middot; 20 Aug 2026. Day counts in Figure 2 are drawn from the illustrative cases in §2 of that document, not from Dodo's observed data &mdash; replacing them with real detection lag is an open item; see §6 of that document for every number we are assuming.</p>
+</footer>
+
+</div>
