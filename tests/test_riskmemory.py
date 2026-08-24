@@ -526,6 +526,28 @@ class TestApp(unittest.TestCase):
         app.reset()
         self.assertEqual(len(app.queue()), n)
 
+    def test_assessments_persist_to_disk(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            store = Path(td) / "assessments.json"
+            os.environ["RISKMEMORY_ASSESSMENTS_FILE"] = str(store)
+            try:
+                app = App()
+                app.assess({"name": "Zed Tools", "purpose": "B2B invoicing", "web": False})
+                self.assertTrue(store.is_file())
+                app.record_decision(
+                    app.assessments()[0]["merchant_id"], "decline", "Not a fit.")
+                app.reset()
+                self.assertEqual(len(app.assessments()), 1)
+                self.assertEqual(app.assessments()[0]["decision_action"], "decline")
+                app2 = App()
+                self.assertEqual(len(app2.assessments()), 1)
+                self.assertEqual(app2.assessments()[0]["name"], "Zed Tools")
+            finally:
+                os.environ.pop("RISKMEMORY_ASSESSMENTS_FILE", None)
+
 
 class TestAssessDifferentiation(unittest.TestCase):
     """Dummy merchants must not all collapse to the 1.7% base rate."""

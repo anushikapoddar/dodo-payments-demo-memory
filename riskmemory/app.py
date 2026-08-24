@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import datetime as _dt
+import json
+import os
+from pathlib import Path
 from typing import Optional
 
 from . import config
@@ -39,7 +42,8 @@ class App:
 
         self.gate_history: list[dict] = []
         self.activity: list[dict] = []       # feeds the summary-bar digest
-        self.assessment_log: list[dict] = []  # every /api/assess in this process
+        self.assessment_log: list[dict] = []
+        self._load_assessments()             # survives restart and Reset demo
         self._seed_memory()
         for a in self.alerts()[:4]:
             self._log("alert", f"{a.merchant} — {a.title}", a.posture_label)
@@ -297,6 +301,42 @@ class App:
     def assessments(self) -> list[dict]:
         return [self._assessment_view(row) for row in self.assessment_log]
 
+    def _assessment_store_path(self) -> Path:
+        override = os.environ.get("RISKMEMORY_ASSESSMENTS_FILE", "").strip()
+        if override:
+            return Path(override)
+        return Path(__file__).resolve().parent.parent / ".demo" / "assessments.json"
+
+    def _load_assessments(self) -> None:
+        path = self._assessment_store_path()
+        if not path.is_file():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if isinstance(raw, list):
+            self.assessment_log = raw
+
+    def _save_assessments(self) -> None:
+        path = self._assessment_store_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(self.assessment_log, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def _next_assessment_id(self) -> str:
+        n = 0
+        for row in self.assessment_log:
+            rid = str(row.get("id") or "")
+            if rid.startswith("as") and rid[2:].isdigit():
+                n = max(n, int(rid[2:]))
+        return f"as{n + 1:04d}"
+
     def _assessment_view(self, row: dict) -> dict:
         """History row with the live analyst call, not the frozen assess snapshot."""
         item = dict(row)
@@ -336,13 +376,14 @@ class App:
                         "decided_by": live.decided_by,
                     })
             brief["decisionRecorded"] = recorded
+        self._save_assessments()
 
     def _log_assessment(self, out: dict) -> None:
         m = out.get("merchant") or {}
         d = out.get("decision") or {}
         web = out.get("web") or {}
         entry = {
-            "id": f"as{len(self.assessment_log) + 1:04d}",
+            "id": self._next_assessment_id(),
             "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
             "merchant_id": out.get("merchant_id") or m.get("id"),
             "name": m.get("name"),
@@ -364,6 +405,7 @@ class App:
         self.assessment_log.insert(0, entry)
         self._log("assess", f"{m.get('name')} → {d.get('headline')}",
                   f"P(bad) {d.get('p_bad')}")
+        self._save_assessments()
 
     def brief(self, merchant_id: str) -> Optional[dict]:
         m = self.by_id.get(merchant_id)

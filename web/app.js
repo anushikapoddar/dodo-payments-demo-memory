@@ -550,11 +550,11 @@ async function viewHistory() {
   state.assessmentIndex = Object.fromEntries(rows.map((r) => [r.id, r]));
   if (!rows.length) {
     return head('Assessment history',
-      'Every merchant assessment run in this session.')
+      'Every assessment you run — saved locally and kept across restarts.')
       + '<div class="card"><div class="empty">No assessments yet. Run one from Assess a merchant.</div></div>';
   }
   return head('Assessment history',
-    'Your recorded Approve / Decline lands in this table. Click a row to reopen it. Newest first.')
+    'Your recorded Approve / Decline lands in this table — saved locally across restarts. Newest first.')
     + `<div class="card"><div class="scroll"><table>
       <thead><tr><th>When</th><th>Merchant</th><th>P(bad)</th><th>Recommendation</th><th>Your decision</th></tr></thead><tbody>
       ${assessmentRows(rows)}
@@ -1356,7 +1356,7 @@ $('#reset').onclick = async () => {
   await post('/api/reset');
   state.portfolio = await api('/api/portfolio');
   state.dir = { q: '', band: '', page: 0 };
-  toast('Demo reset to its initial state.');
+  toast('Demo reset — portfolio rebuilt; assessment history kept.');
   go('homepage');
 };
 
