@@ -1,12 +1,13 @@
 """Tests for the merchant risk memory pipeline."""
-import sys, unittest
+import os, sys, unittest
 from pathlib import Path
+
+os.environ["RISKMEMORY_WEB"] = "0"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from riskmemory import config
 from riskmemory.app import App
-from riskmemory.converse import ASK, FEEDBACK, TELL, classify, derive_trigger, polarity_of
 from riskmemory.corpus import build, summary
 from riskmemory.decision import decide, precedent_likelihood
 from riskmemory.graph import ContextGraph
@@ -207,7 +208,7 @@ class TestDashboard(unittest.TestCase):
         self.assertIn("activity_total", d)
 
     def test_no_persistent_summary_bar_anywhere(self):
-        """The bar was removed: it duplicated the Dashboard and cluttered Chat."""
+        """The bar was removed: it duplicated the Dashboard."""
         web = Path(__file__).parent.parent / "web"
         for f in ("index.html", "app.js", "styles.css"):
             text = (web / f).read_text()
@@ -334,9 +335,17 @@ class TestDecision(unittest.TestCase):
         class M:
             truth_bad = True
             truth_category = "card_testing"
+            learned_bad = False
         lr, note = precedent_likelihood([(M(), 0.9)])
         self.assertLessEqual(lr, 1.0)
         self.assertIn("did not cause", note)
+
+    def test_analyst_decline_counts_as_precedent(self):
+        class M:
+            truth_bad = False
+            learned_bad = True
+        lr, _note = precedent_likelihood([(M(), 0.5)])
+        self.assertGreater(lr, 1.0)
 
     def test_expected_costs_bracket_the_threshold(self):
         d = decide([])
@@ -377,66 +386,122 @@ class TestRetrievalStemming(unittest.TestCase):
             self.assertEqual(stem(w), w)
 
 
-class TestConverse(unittest.TestCase):
-    def app(self):
-        return App()
+class TestAssess(unittest.TestCase):
+    """POST /api/assess reuses the live engine and does not record a decision."""
 
-    def test_intent_classification(self):
-        self.assertEqual(classify("Why did we decline Lumen Labs?"), ASK)
-        self.assertEqual(classify("what do we know about ebooks"), ASK)
-        self.assertEqual(classify("tell me about Kindle Grove"), ASK)
-        self.assertEqual(classify("Telegram fulfilment is risky"), TELL)
-        self.assertEqual(classify("Actually Marlow Type was fine"), FEEDBACK)
+    def test_existing_merchant_by_id(self):
+        import json
+        out = APP.assess({"merchant_id": "m90003"})
+        json.dumps(out)
+        self.assertEqual(out["merchant_id"], "m90003")
+        self.assertFalse(out["created"])
+        self.assertEqual(out["merchant"]["name"], "Lumen Labs")
+        self.assertIn(out["decision"]["recommendation"],
+                      ("approve", "conditions", "escalate", "decline"))
+        self.assertTrue(out["risk_band"])
+        self.assertTrue(out["why"])
+        self.assertTrue(out["signals"])          # Case C is graph-linked
+        self.assertTrue(out["graph"]["nodes"])
+        self.assertTrue(out["memories"] or out["precedent"])
 
-    def test_polarity_detection(self):
-        self.assertEqual(polarity_of("this pattern is risky and fraudulent"), "adverse")
-        self.assertEqual(polarity_of("these merchants are legitimate and fine"), "clearing")
+    def test_existing_merchant_by_name(self):
+        out = APP.assess({"name": "kindle grove"})
+        self.assertEqual(out["merchant_id"], "m90004")
+        self.assertFalse(out["created"])
+        self.assertEqual(APP.by_id["m90004"].status, "pending")
 
-    def test_trigger_strips_verdict_scaffolding(self):
-        t = derive_trigger("Merchants selling unlimited ebook libraries are risky "
-                           "and should be declined")
-        self.assertIn("ebook", t)
-        for word in ("risky", "declined", "merchant", "should"):
-            self.assertNotIn(word, t)
+    def test_does_not_record_a_human_decision(self):
+        app = App()
+        before_status = app.by_id["m90003"].status
+        before_rationale = app.by_id["m90003"].rationale
+        before_mem = app.store.counts()["total"]
+        app.assess({"merchant_id": "m90003"})
+        m = app.by_id["m90003"]
+        self.assertEqual(m.status, before_status)
+        self.assertEqual(m.rationale, before_rationale)
+        self.assertEqual(app.store.counts()["total"], before_mem)
 
-    def test_asking_about_a_merchant_cites_its_evidence(self):
-        r = self.app().ask("Why is Lumen Labs risky?")
-        self.assertEqual(r["intent"], ASK)
-        self.assertEqual(r["subject"], "m90003")
-        self.assertIn("Vellum Reader", r["answer"])
-        self.assertTrue(any(e["kind"] == "graph" for e in r["evidence"]))
-        self.assertIsNone(r["memory_action"])
+    def test_missing_name_is_an_error(self):
+        self.assertEqual(APP.assess({})["error"], "merchant name is required")
+        self.assertEqual(APP.assess({"merchant_id": "nope"})["error"], "unknown merchant")
+        self.assertEqual(
+            APP.assess({"name": "Brand New Co"})["error"],
+            "purpose is required for a new merchant")
 
-    def test_asking_never_writes_memory(self):
-        app = self.app()
-        before = app.store.counts()["total"]
-        app.ask("what do we know about ebook catalogues?")
-        app.ask("how are we doing overall?")
-        self.assertEqual(app.store.counts()["total"], before)
+    def test_new_merchant_then_decide(self):
+        app = App()
+        n_queue = len(app.queue())
+        out = app.assess({
+            "name": "Zed Analytics",
+            "category": "saas",
+            "country": "US",
+            "purpose": "Team analytics dashboard for small product teams",
+            "volume": 8000,
+        })
+        self.assertTrue(out["created"])
+        mid = out["merchant_id"]
+        self.assertTrue(mid.startswith("ma"))
+        self.assertEqual(app.by_id[mid].status, "pending")
+        self.assertEqual(len(app.queue()), n_queue + 1)
+        # same engine the brief uses
+        self.assertEqual(out["decision"]["recommendation"],
+                         app.brief(mid)["decision"]["recommendation"])
+        r = app.record_decision(mid, "approve",
+                                "Clean analytics product, no adverse memory.")
+        self.assertTrue(r["ok"])
+        self.assertEqual(app.by_id[mid].status, "approved")
+        self.assertEqual(len(app.queue()), n_queue)
+        self.assertIn("action", r["reconciliation"])
+        hist = app.assessments()
+        self.assertEqual(hist[0]["decision_action"], "approve")
+        self.assertIn("Clean analytics", hist[0]["decision_rationale"])
+        self.assertEqual(hist[0]["brief"]["decisionRecorded"]["action"], "approve")
+        self.assertEqual(hist[0]["brief"]["merchant"]["status"], "approved")
 
-    def test_telling_writes_memory_and_reports_impact(self):
-        app = self.app()
-        r = app.ask("Merchants selling unlimited ebook libraries without publisher "
-                    "licences are risky")
-        self.assertEqual(r["intent"], TELL)
-        self.assertEqual(r["memory_action"]["action"], "ADD")
-        self.assertIsNotNone(r["replay"])
-        self.assertGreaterEqual(r["replay"]["caught_delta"], 0)
+    def test_brief_and_queue_still_work(self):
+        import json
+        json.dumps(APP.brief("m90003"))
+        json.dumps(APP.queue())
+        self.assertEqual(
+            APP.assess({"merchant_id": "m90003"})["decision"]["recommendation"],
+            APP.brief("m90003")["decision"]["recommendation"])
 
-    def test_human_assertions_apply_immediately(self):
-        """A founder's instruction should not sit behind the replay gate."""
-        app = self.app()
-        r = app.ask("Fulfilment via telegram on a brand new domain is risky")
-        mem = app.store.records[r["memory_action"]["memory"]["id"]]
-        self.assertTrue(mem.promoted)
-        self.assertEqual(mem.source, "founder (told directly)")
 
-    def test_transcript_survives_and_resets(self):
-        app = self.app()
-        app.ask("how are we doing?")
-        self.assertEqual(len(app.transcript()), 1)
-        app.reset()
-        self.assertEqual(len(app.transcript()), 0)
+class TestExplainEnv(unittest.TestCase):
+    def test_explain_is_silent_without_a_key(self):
+        import os
+        from riskmemory.explain import explain_assessment
+        prev = {k: os.environ.pop(k) for k in (
+            "AWS_BEARER_TOKEN_BEDROCK", "ANTHROPIC_API_KEY") if k in os.environ}
+        try:
+            self.assertIsNone(explain_assessment({
+                "merchant": {"name": "x"},
+                "decision": {"headline": "Approve"},
+            }))
+        finally:
+            os.environ.update(prev)
+
+    def test_dotenv_does_not_override_live_env(self):
+        import os, tempfile
+        from pathlib import Path
+        from riskmemory.explain import load_dotenv
+        had_region = "AWS_REGION" in os.environ
+        old_region = os.environ.get("AWS_REGION")
+        os.environ["AWS_REGION"] = "eu-west-1"
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write("AWS_REGION=us-east-1\nFAKE_DOTENV_FLAG=1\n")
+            path = Path(f.name)
+        try:
+            load_dotenv(path)
+            self.assertEqual(os.environ["AWS_REGION"], "eu-west-1")
+            self.assertEqual(os.environ.get("FAKE_DOTENV_FLAG"), "1")
+        finally:
+            path.unlink(missing_ok=True)
+            os.environ.pop("FAKE_DOTENV_FLAG", None)
+            if had_region:
+                os.environ["AWS_REGION"] = old_region
+            else:
+                os.environ.pop("AWS_REGION", None)
 
 
 class TestApp(unittest.TestCase):
@@ -460,6 +525,137 @@ class TestApp(unittest.TestCase):
         self.assertEqual(len(app.queue()), n - 1)
         app.reset()
         self.assertEqual(len(app.queue()), n)
+
+
+class TestAssessDifferentiation(unittest.TestCase):
+    """Dummy merchants must not all collapse to the 1.7% base rate."""
+
+    def test_generic_saas_stays_near_the_base_rate(self):
+        app = App()
+        out = app.assess({
+            "name": "Cedar Home SaaS", "category": "saas", "country": "GB",
+            "purpose": "Inventory software for independent furniture retailers",
+            "web": False,
+        })
+        self.assertAlmostEqual(out["decision"]["p_bad"], config.CONFIRMED_BAD_RATE, delta=0.02)
+        self.assertEqual(out["web"]["status"], "skipped")
+        self.assertTrue(app.assessments())
+
+    def test_gambling_copy_scores_higher_than_generic_saas(self):
+        app = App()
+        clean = app.assess({
+            "name": "Cedar Home SaaS", "purpose": "Inventory software for retailers",
+            "web": False,
+        })
+        risky = app.assess({
+            "name": "Nightline Casino",
+            "purpose": "Online casino and sportsbook with crypto deposits",
+            "web": False,
+        })
+        self.assertGreater(risky["decision"]["p_bad"], clean["decision"]["p_bad"] + 0.03)
+        self.assertTrue(risky["signals"])
+        self.assertEqual(len(app.assessments()), 2)
+
+    def test_lumen_still_comes_back_hot(self):
+        out = APP.assess({"merchant_id": "m90003", "web": False})
+        self.assertGreater(out["decision"]["p_bad"], 0.5)
+        self.assertEqual(out["decision"]["recommendation"], "decline")
+
+    def test_history_is_session_assessments(self):
+        app = App()
+        app.assess({"name": "Zed Tools", "purpose": "B2B invoicing", "web": False})
+        self.assertEqual(len(app.assessments()), 1)
+        self.assertEqual(app.assessments()[0]["name"], "Zed Tools")
+
+    def test_decision_stamps_every_history_row_for_that_merchant(self):
+        app = App()
+        app.assess({"name": "Zed Tools", "purpose": "B2B invoicing", "web": False})
+        app.assess({"name": "Zed Tools", "purpose": "B2B invoicing", "web": False})
+        mid = app.assessments()[0]["merchant_id"]
+        app.record_decision(mid, "decline", "Not a fit.")
+        rows = [r for r in app.assessments() if r["merchant_id"] == mid]
+        self.assertEqual([r["decision_action"] for r in rows], ["decline", "decline"])
+        self.assertTrue(all(r["brief"]["decisionRecorded"]["action"] == "decline" for r in rows))
+
+    def test_theme_matcher_catches_casino_language(self):
+        from riskmemory.websearch import match_themes
+        themes = {t["theme"] for t in match_themes("an online casino and sportsbook")}
+        self.assertIn("gambling", themes)
+
+    def test_analyst_decline_heats_a_similar_later_applicant(self):
+        """A recorded decline must move P(bad) for the next similar merchant."""
+        app = App()
+        first = app.assess({
+            "name": "Nightline Casino",
+            "purpose": "Online casino and sportsbook with crypto deposits",
+            "web": False,
+        })
+        p_before = first["decision"]["p_bad"]
+        rec = app.record_decision(
+            first["merchant_id"], "decline",
+            "Gambling is not a vertical we will underwrite.")
+        self.assertTrue(rec["ok"])
+        self.assertTrue(app.by_id[first["merchant_id"]].learned_bad)
+        later = app.assess({
+            "name": "Harbor Sportsbook",
+            "purpose": "Online casino and sportsbook with crypto deposits",
+            "web": False,
+        })
+        self.assertGreater(later["decision"]["p_bad"], p_before)
+        self.assertTrue(any(
+            (s.get("id") or "").startswith("memory:")
+            or s.get("category") == "precedent"
+            for s in later["signals"]))
+        self.assertTrue(any(p.get("went_bad") for p in later.get("precedent") or []))
+
+    def test_analyst_decline_heats_different_wording_same_vertical(self):
+        """Decline memory must match on vertical themes, not identical copy."""
+        app = App()
+        first = app.assess({
+            "name": "casino king",
+            "purpose": "casino sportsbook crypto",
+            "web": False,
+        })
+        mid = first["merchant_id"]
+        app.by_id[mid].web_report = {
+            "status": "found",
+            "themes": [{"theme": "gambling", "matched": "casino", "lr": 8.5}],
+            "hits": [],
+        }
+        app.record_decision(mid, "decline", "Gambling MoR.")
+        later = app.assess({
+            "name": "gambler ninjas",
+            "purpose": "gambling ninjas betting app",
+            "web": False,
+        })
+        lm = app.by_id[later["merchant_id"]]
+        lm.web_report = {
+            "status": "found",
+            "themes": [{"theme": "gambling", "matched": "gambling", "lr": 8.5}],
+            "hits": [],
+        }
+        from riskmemory.signals import detect_all
+        from riskmemory.decision import decide
+        sigs = detect_all(lm, app.graph, app.by_id, app.portfolio_volume, app.store)
+        dec = decide(sigs, app._precedent(lm))
+        self.assertGreater(dec.p_bad, first["decision"]["p_bad"] + 0.05)
+        self.assertTrue(any(s.posture == "memory" for s in sigs))
+
+    def test_analyst_decline_does_not_heat_an_unrelated_saas(self):
+        app = App()
+        first = app.assess({
+            "name": "Nightline Casino",
+            "purpose": "Online casino and sportsbook with crypto deposits",
+            "web": False,
+        })
+        app.record_decision(first["merchant_id"], "decline", "Prohibited vertical.")
+        saas = app.assess({
+            "name": "Cedar Ledger",
+            "purpose": "Inventory software for independent furniture retailers",
+            "web": False,
+        })
+        self.assertAlmostEqual(
+            saas["decision"]["p_bad"], config.CONFIRMED_BAD_RATE, delta=0.03)
 
 
 if __name__ == "__main__":

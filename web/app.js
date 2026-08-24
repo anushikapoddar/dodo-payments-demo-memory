@@ -4,10 +4,22 @@
    from an endpoint that computed it; nothing here is a placeholder. */
 
 const $ = (s, r = document) => r.querySelector(s);
+let toastTimer;
+function toast(msg) {
+  const el = $('#toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 3200);
+}
 const api = async (p, opts) => {
   const r = await fetch(p, opts);
-  if (!r.ok) throw new Error(`${p} -> ${r.status}`);
-  return r.json();
+  const text = await r.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+  if (!r.ok) throw new Error((data && data.error) || `${p} -> ${r.status}`);
+  return data;
 };
 const post = (p, body) => api(p, {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -20,9 +32,92 @@ const pct = (n, d = 1) => `${(n * 100).toFixed(d)}%`;
 const usd = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M`
   : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
 const money = (n) => `$${Math.round(n).toLocaleString()}`;
+
+/** Pin on a zoned track: approve-safe left of the decline line, not a fill from 0. */
+function pBadMeter(p, threshold, tone) {
+  const hi = Math.min(1, Math.max(threshold * 2.2, p * 1.2, 0.30));
+  const pPos = Math.min(97, Math.max(2.5, (p / hi) * 100));
+  const tPos = Math.min(92, Math.max(10, (threshold / hi) * 100));
+  const pin = tone === 'ok' ? 'ok' : (tone === 'warn' || tone === 'high') ? 'warn' : 'bad';
+  const pinSide = pPos < 16 ? 'left' : pPos > 84 ? 'right' : 'mid';
+  return `<div class="pbar" role="img"
+    aria-label="Estimated P(bad) ${pct(p)} against a ${pct(threshold)} decline line">
+    <div class="pbar-you ${pinSide}" style="left:${pPos.toFixed(1)}%">${pct(p)}</div>
+    <div class="pbar-track">
+      <i class="zone-ok" style="width:${tPos.toFixed(1)}%"></i>
+      <b class="mark" style="left:${tPos.toFixed(1)}%"></b>
+      <b class="pin ${pin}" style="left:${pPos.toFixed(1)}%"></b>
+    </div>
+    <div class="pbar-scale">
+      <span>0%</span>
+      <span class="at" style="left:${tPos.toFixed(1)}%">${pct(threshold)}</span>
+      <span>${pct(hi, 0)}</span>
+    </div>
+  </div>`;
+}
+
+function recChain(d) {
+  const contribs = d.contributions || [];
+  if (!contribs.length) {
+    return `<p class="rec-unchanged">Unchanged from the ${pct(d.prior)} portfolio base rate — no signals or precedent moved the odds.</p>`;
+  }
+  const steps = [`<div class="rec-step"><span>Base rate</span><b>${pct(d.prior)}</b></div>`];
+  contribs.forEach((c) => {
+    steps.push(`<span class="rec-op" aria-hidden="true">×</span>
+      <div class="rec-step"><span>${esc(c.title)}</span><b>×${c.applied_lr}</b></div>`);
+  });
+  steps.push(`<span class="rec-op" aria-hidden="true">→</span>
+    <div class="rec-step out"><span>P(bad)</span><b>${pct(d.p_bad)}</b></div>`);
+  return `<div class="rec-chain">${steps.join('')}</div>`;
+}
+
+function recCosts(d) {
+  const aWin = d.expected_cost_approve < d.expected_cost_decline;
+  return `<div class="rec-costs">
+    <div class="rec-cost${aWin ? ' win' : ''}">
+      <span>Expected cost of approving</span>
+      <b>${money(d.expected_cost_approve)}</b>
+      ${aWin ? '<em>cheaper path</em>' : ''}
+    </div>
+    <div class="rec-cost${!aWin ? ' win' : ''}">
+      <span>Expected cost of declining</span>
+      <b>${money(d.expected_cost_decline)}</b>
+      ${!aWin ? '<em>cheaper path</em>' : ''}
+    </div>
+  </div>`;
+}
+
+function webCard(web) {
+  if (!web) return '';
+  const st = web.status || 'skipped';
+  const label = {
+    found: 'Public pages found', empty: 'No public pages found',
+    error: 'Lookup failed', skipped: 'Lookup skipped',
+  }[st] || st;
+  const hits = web.hits || [];
+  const themes = web.themes || [];
+  const hitHtml = hits.length
+    ? `<ul class="web-hits">${hits.map((h) => `<li>
+        ${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>`
+                : `<strong>${esc(h.title)}</strong>`}
+        <span class="tiny muted"> ${esc(h.source || '')}</span>
+        <div class="tiny muted">${esc(h.snippet || '')}</div></li>`).join('')}</ul>`
+    : `<p class="tiny muted">${esc(web.reason || 'Nothing retrieved.')}</p>`;
+  const themeHtml = themes.length
+    ? `<p class="tiny">Flagged on the open web: ${themes.map((t) => esc(t.theme.replace(/_/g, ' '))).join(', ')}</p>`
+    : '';
+  return `<div class="web-box">
+    <div class="k mono tiny muted">OPEN WEB</div>
+    <div class="web-label">${esc(label)}</div>
+    <p class="tiny muted">Query: ${esc(web.query || '—')}</p>
+    ${hitHtml}${themeHtml}
+  </div>`;
+}
 const LABEL = {
   ai_product: 'AI product', saas: 'SaaS', digital_goods: 'Digital goods',
   ebooks_publications: 'Ebooks & publications', templates_plugins_apps: 'Templates & plugins',
+  marketing_outreach: 'Marketing outreach', ai_content_generation: 'AI content generation',
+  productized_services: 'Productized services',
 };
 const title = (s) => LABEL[s]
   || String(s || '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -37,7 +132,6 @@ const ICON = {
   brain: '<path d="M12 4.5a3 3 0 0 0-5.9.7A3 3 0 0 0 4 10a3 3 0 0 0 1.4 4.7A3 3 0 0 0 9 20a3 3 0 0 0 3-2z"/><path d="M12 4.5a3 3 0 0 1 5.9.7A3 3 0 0 1 20 10a3 3 0 0 1-1.4 4.7A3 3 0 0 1 15 20a3 3 0 0 1-3-2z"/>',
   graph: '<circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.2 7.4L10.4 16M16.8 7.4L13.6 16M7.5 6h9"/>',
   bell: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
-  chat: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 20.5l1.6-4.9A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 1.9"/>',
   shield: '<path d="M12 22s8-3.4 8-9.4V5.6L12 2.5 4 5.6v7c0 6 8 9.4 8 9.4z"/><path d="M12 8.5v4M12 15.8v.1"/>',
   chart: '<path d="M3 3v18h18"/><path d="M7 15l3.5-4 3 2.5L20 7"/>',
@@ -54,19 +148,19 @@ const svg = (name, cls = '') =>
   `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[name] || ''}</svg>`;
 
 const VIEWS = [
-  ['dashboard', 'Overview', 'grid'],
+  ['homepage', 'Homepage', 'grid'],
+  ['history', 'Assessment history', 'clock'],
   ['merchants', 'Merchants', 'users'],
-  ['cases', 'Evaluations', 'check'],
   ['memory', 'Memory layer', 'brain'],
-  ['graph', 'Graph explorer', 'graph'],
+  ['cases', 'Evaluations', 'check'],
+  ['graph', 'Context graph', 'graph'],
   ['alerts', 'Alerts', 'bell'],
-  ['ask', 'Chat', 'chat'],
-  ['history', 'History', 'clock'],
 ];
 
 const state = {
-  view: 'dashboard', portfolio: null, briefId: null,
+  view: 'homepage', portfolio: null, briefId: null,
   dir: { q: '', band: '', page: 0 },
+  assessResult: null, assessFrom: null,
 };
 
 function renderNav() {
@@ -74,7 +168,8 @@ function renderNav() {
   const counts = {
     cases: p.queue_size, alerts: p.alert_total,
     memory: p.memory && p.memory.active,
-  };
+    history: p.assessment_count,
+};
   $('#nav').innerHTML = VIEWS.map(([id, label, icon]) => {
     const n = counts[id];
     return `<a data-view="${id}" class="${state.view === id ? 'on' : ''}" tabindex="0">
@@ -98,7 +193,21 @@ function renderNav() {
 function go(view, id) {
   state.view = view; state.briefId = id || null;
   if (view === 'merchants') state.dir.page = 0;
+  if (view !== 'assess') {
+    state.assessResult = null;
+    state.assessFrom = null;
+  }
   renderNav(); render();
+}
+
+/* Homepage has its own greeting + assess CTA; the global search belongs
+   on directory-style views. Hide it (and empty topbar space) there. */
+function syncTopbar() {
+  const hide = state.view === 'homepage' && !state.briefId;
+  const bar = document.querySelector('.topbar');
+  const search = bar && bar.querySelector('.search');
+  if (search) search.hidden = hide;
+  if (bar) bar.classList.toggle('nosearch', hide);
 }
 
 /* Page header. `right` holds the period selector and primary action. */
@@ -154,18 +263,14 @@ function donut(dist, total) {
     </div></div>`;
 }
 
-const ACT_ICON = { decision: ['check', 'green'], memory: ['brain', 'purple'],
-  replay: ['bolt', 'blue'], alert: ['shield', 'red'] };
-
-async function viewOverview() {
+async function viewHomepage() {
   const [o, p] = await Promise.all([api('/api/overview'), api('/api/portfolio')]);
   state.portfolio = p; renderNav();
   const v = p.vamp;
 
   return head(`${greeting()}, Anushika`,
-    'Your memory layer is continuously learning from every decision and reconciling what it already believed.',
-    `<div class="select">${svg('clock')} Live corpus ${svg('down')}</div>
-     <button class="btn-primary" id="newapp">${svg('plus')} Assess a merchant</button>`)
+    'Portfolio risk, recent evaluations, and the live book.',
+    `<button class="btn-primary" id="newapp">${svg('plus')} Assess a merchant</button>`)
   + `<div class="stats">${o.stats.map(statCard).join('')}</div>
   <div class="cols">
     <div>
@@ -205,16 +310,6 @@ async function viewOverview() {
             <span class="when">${esc(r.when)}</span>
             ${svg('chev', 'chev')}</div>`).join('')
           || '<div class="empty">No evaluations yet.</div>'}</div></div>
-
-      <div class="card"><h3>Memory layer activity
-        <span class="hint">${o.activity_total} today</span></h3>
-        <div class="timeline">${o.activity.map((a) => {
-          const [ic, tone] = ACT_ICON[a.kind] || ['file', 'blue'];
-          return `<div class="tl"><div class="ic ${tone}">${svg(ic)}</div>
-            <div class="b"><div class="t">${esc(a.title)}</div>
-              <div class="s">${esc(a.detail)}</div></div>
-            <span class="when">${esc(a.at)}</span></div>`;
-        }).join('') || '<div class="empty">Quiet so far today.</div>'}</div></div>
     </div>
   </div>`;
 }
@@ -266,7 +361,7 @@ async function viewMerchants() {
   const d = await api(dirQuery(PAGE_SIZE, state.dir.page));
   return head('Merchants',
     'Every merchant the memory layer has an opinion about, ranked by the probability it would decline them today.',
-    `<div class="select">${svg('file')} ${d.total.toLocaleString()} on file</div>`)
+    `<span class="tiny muted">${d.total.toLocaleString()} on file</span>`)
   + `<div class="card">
       <div class="toolbar">
         <div class="search">${svg('search')}
@@ -283,7 +378,7 @@ async function viewMerchants() {
     </div>`;
 }
 
-/* ------------------------------------------------------- graph explorer */
+/* ------------------------------------------------------- context graph */
 async function viewGraph() {
   const p = state.portfolio || await api('/api/portfolio');
   const d = await api(dirQuery(8, 0));
@@ -292,9 +387,9 @@ async function viewGraph() {
   const g = pick ? (await api(`/api/brief/${pick}`)).graph : null;
   const who = rows.find((r) => r.id === pick);
 
-  return head('Graph explorer',
+  return head('Context graph',
     'The context graph is what turns an isolated application into a merchant with a history. Pick a merchant to see the entities it shares with the rest of the portfolio.',
-    `<div class="select">${svg('graph')} ${p.graph.nodes.toLocaleString()} entities</div>`)
+    `<span class="tiny muted">${p.graph.nodes.toLocaleString()} entities</span>`)
   + `<div class="cols"><div>
       <div class="card"><h3>${who ? esc(who.name) : 'No merchant selected'}
         <span class="hint">corroborating paths, hub nodes suppressed</span></h3>
@@ -321,7 +416,7 @@ async function viewGraph() {
 /* Activity lives on the Dashboard as a card. There is deliberately no
    persistent summary strip: once the Dashboard existed, a bar repeating the
    same five numbers on every screen was duplication, and it made simple
-   surfaces like Chat and History harder to read. */
+   surfaces like Assessment history harder to read. */
 const KIND_LABEL = { decision: 'Decision', memory: 'Memory', replay: 'Replay', alert: 'Alert' };
 
 function head(title, sub, right) {
@@ -378,88 +473,24 @@ async function viewPortfolio() {
     </div>`;
 }
 
-/* -------------------------------------------------------------- console */
-/* Deliberately tiny markdown: bold, italic, bullets, paragraphs. Answers are
-   composed server-side from cited sources, so nothing here needs to be clever. */
-function md(text) {
-  const lines = String(text).split('\n');
-  let html = '', inList = false;
-  const inline = (t) => esc(t)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/_(.+?)_/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code>$1</code>');
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    if (line.startsWith('- ')) {
-      if (!inList) { html += '<ul>'; inList = true; }
-      html += `<li>${inline(line.slice(2))}</li>`;
-      continue;
-    }
-    if (inList) { html += '</ul>'; inList = false; }
-    if (line.trim()) html += `<p>${inline(line)}</p>`;
-  }
-  if (inList) html += '</ul>';
-  return html;
-}
-
-const PROMPTS = [
-  'How are we doing overall?',
-  'Why is Lumen Labs risky?',
-  'What do we know about Vibe3D?',
-  'What do we know about ebook catalogues?',
-  'Telegram-only fulfilment on a domain under 30 days old is risky',
-];
-
-function turnHtml(t) {
-  const evi = (t.evidence || []).length ? `<div class="evi">${
-    t.evidence.slice(0, 6).map((e) => `<div class="row"><b>${esc(e.kind)}</b>
-      <span><strong>${esc(e.label)}</strong> — ${esc(String(e.detail).slice(0, 150))}</span></div>`).join('')
-  }</div>` : '';
-
-  let impact = '';
-  if (t.replay) {
-    const good = t.replay.caught_delta > 0 && t.replay.false_flag_delta <= 0;
-    const harm = t.replay.false_flag_delta > 0;
-    impact = `<div class="impact ${good ? 'good' : harm ? 'harm' : ''}">
-      <strong>Replayed over ${t.replay.population} past decisions:</strong>
-      ${t.replay.caught_delta >= 0 ? '+' : ''}${t.replay.caught_delta} confirmed-bad caught,
-      ${t.replay.false_flag_delta >= 0 ? '+' : ''}${t.replay.false_flag_delta} legitimate merchants wrongly flagged.
-    </div>`;
-  }
-
-  let action = '';
-  if (t.memory_action) {
-    const a = t.memory_action.action;
-    const chip = { ADD: 'c-ok', UPDATE: 'c-acc', INVALIDATE: 'c-bad', 'NO-OP': 'c-mute', DISPUTED: 'c-warn' }[a] || 'c-mute';
-    action = `<div style="margin-top:10px"><span class="chip ${chip}">memory ${esc(a)}</span></div>`;
-  }
-
-  return `<div class="turn you"><div class="who">you</div>
-      <div class="bubble">${esc(t.you)}</div></div>
-    <div class="turn mem ${esc(t.intent)}"><div class="who">memory</div>
-      <div class="bubble">${md(t.answer)}${action}${impact}${evi}</div></div>`;
-}
-
-async function viewAsk() {
-  const transcript = await api('/api/transcript');
-  return head('Chat',
-    'Ask what memory holds, tell it something to remember, or correct it when it is wrong. Every answer cites the memories, graph paths and cases it used — nothing here is generated prose.')
-    + `<div class="console">
-      <div class="thread" id="thread">${
-        transcript.length ? transcript.map(turnHtml).join('')
-          : '<div class="card"><div class="empty">Nothing asked yet. Try one of the prompts below.</div></div>'}</div>
-      <div class="chips">${PROMPTS.map((p, i) =>
-        `<button data-prompt="${i}">${esc(p)}</button>`).join('')}</div>
-      <div class="composer">
-        <textarea id="say" placeholder="Ask a question, or state something for memory to hold…"></textarea>
-        <button class="btn" id="send">Send</button>
-      </div></div>`;
-}
-
 /* ---------------------------------------------------------------- cases */
+function assessmentRows(rows) {
+  return rows.map((r) => `<tr class="click" data-open-assess="${esc(r.id)}">
+        <td class="tiny muted">${esc((r.at || '').replace('T', ' ').replace('+00:00', ' UTC'))}</td>
+        <td><strong>${esc(r.name)}</strong><div class="tiny muted">${esc(r.domain || '')}${r.created ? ' · new' : ''}</div></td>
+        <td class="num"><strong>${r.p_bad != null ? pct(r.p_bad) : '—'}</strong></td>
+        <td><span class="chip ${r.recommendation === 'decline' ? 'c-bad'
+          : r.recommendation === 'escalate' ? 'c-warn'
+          : r.recommendation === 'conditions' ? 'c-acc' : 'c-ok'}">${esc(r.headline || r.recommendation || '')}</span></td>
+        <td>${r.decision_action
+          ? `<span class="chip ${r.decision_action === 'decline' ? 'c-bad' : r.decision_action === 'approve' ? 'c-ok' : 'c-warn'}">${esc(REC_LABEL[r.decision_action] || r.decision_action)}</span>`
+          : '<span class="tiny muted">Not recorded</span>'}</td></tr>`).join('');
+}
+
 async function viewCases() {
-  const [queue, alerts, drift] = await Promise.all([
-    api('/api/queue'), api('/api/alerts'), api('/api/drift')]);
+  const [queue, alerts, drift, assessments] = await Promise.all([
+    api('/api/queue'), api('/api/alerts'), api('/api/drift'), api('/api/assessments')]);
+  state.assessmentIndex = Object.fromEntries((assessments || []).map((r) => [r.id, r]));
   const drifted = new Set(drift.map((d) => d.merchant_id));
 
   const rows = [
@@ -475,17 +506,26 @@ async function viewCases() {
       why: a.title, tag: a.severity, tagText: a.posture_label,
       exposure: a.exposure,
     })),
-  // Sort on P(bad) alone. It is the one number comparable across a new
-  // application and a merchant already on the platform — ranking by alert
-  // severity instead would bury a 93% decline under a 19% medium alert.
   ].sort((a, b) => b.p - a.p);
 
   const tagClass = (t) => ({ decline: 'c-bad', escalate: 'c-warn', conditions: 'c-acc',
     approve: 'c-ok', critical: 'c-bad', high: 'c-warn', medium: 'c-mute' }[t] || 'c-mute');
 
-  return head('Cases',
-    'Everything that needs a human, in one list — new applications and merchants already on the platform, most urgent first.')
-    + `<div class="card"><div class="scroll"><table>
+  const session = assessments || [];
+  const sessionCard = session.length ? `<div class="card"><h3>This session
+      <span class="hint">${session.length} assessment${session.length === 1 ? '' : 's'} you ran</span></h3>
+      <div class="scroll"><table>
+        <thead><tr><th>When</th><th>Merchant</th><th>P(bad)</th><th>Recommendation</th><th>Your decision</th></tr></thead>
+        <tbody>${assessmentRows(session)}</tbody></table></div>
+      <p class="tiny muted" style="margin:12px 0 0">This is where a Decline or Approve lands.
+        Click a row to reopen the brief.</p></div>` : '';
+
+  return head('Evaluations',
+    'Your session first — then the engine inbox of cases that already need a human.')
+    + sessionCard
+    + `<div class="card"><h3>Needs a human
+        <span class="hint">queued applications and live alerts — not your session log</span></h3>
+      <div class="scroll"><table>
       <thead><tr><th>Merchant</th><th>Why it is here</th><th>P(bad)</th>
         <th>Exposure</th><th></th></tr></thead><tbody>
       ${rows.map((r) => `<tr class="click" data-id="${r.id}">
@@ -497,7 +537,7 @@ async function viewCases() {
       </tbody></table></div>
       <p class="tiny muted" style="margin:12px 0 0">${queue.length} new application${queue.length === 1 ? '' : 's'},
         ${alerts.length} already on the platform, ${drift.length} of them drifted from what we underwrote.
-        Click any row to open it in chat.</p>
+        Click any row to open the case brief.</p>
       <p class="tiny muted" style="margin:6px 0 0">Not shown: ${(state.portfolio.approved || 0).toLocaleString()}
         merchants the system correctly left alone — including
         <strong>${(state.portfolio.real_customers || 0)} named Dodo customers</strong>
@@ -506,18 +546,18 @@ async function viewCases() {
 
 /* --------------------------------------------------------------- history */
 async function viewHistory() {
-  const t = await api('/api/transcript');
-  if (!t.length) {
-    return head('History', 'Past conversations. Nothing yet — ask something in Chat.')
-      + '<div class="card"><div class="empty">No conversations yet.</div></div>';
+  const rows = await api('/api/assessments');
+  state.assessmentIndex = Object.fromEntries(rows.map((r) => [r.id, r]));
+  if (!rows.length) {
+    return head('Assessment history',
+      'Every merchant assessment run in this session.')
+      + '<div class="card"><div class="empty">No assessments yet. Run one from Assess a merchant.</div></div>';
   }
-  return head('History', 'Every conversation, newest first. Each one records what was asked, what memory answered, and what changed.')
+  return head('Assessment history',
+    'Your recorded Approve / Decline lands in this table. Click a row to reopen it. Newest first.')
     + `<div class="card"><div class="scroll"><table>
-      <thead><tr><th>You asked</th><th>Intent</th><th>Memory changed</th></tr></thead><tbody>
-      ${t.slice().reverse().map((x) => `<tr>
-        <td>${esc(x.you)}</td>
-        <td><span class="chip ${x.intent === 'ask' ? 'c-mute' : x.intent === 'tell' ? 'c-ok' : 'c-warn'}">${esc(x.intent)}</span></td>
-        <td class="tiny muted">${x.memory_action ? esc(x.memory_action.action) : '—'}</td></tr>`).join('')}
+      <thead><tr><th>When</th><th>Merchant</th><th>P(bad)</th><th>Recommendation</th><th>Your decision</th></tr></thead><tbody>
+      ${assessmentRows(rows)}
       </tbody></table></div></div>`;
 }
 
@@ -814,16 +854,203 @@ async function replaySection() {
       </div>`).join('')
       : `<div class="card"><div class="empty">No incidents ingested yet. Run one above to see the gate work.</div></div>`);
 }
+function signalCards(signals, empty) {
+  if (!signals || !signals.length) return `<p class="tiny muted">${esc(empty)}</p>`;
+  return signals.map((s) => `
+    <div class="sig p-${esc(s.posture)}">
+      <div class="t"><span>${esc(s.title)}</span><span class="lr">LR ${s.lr}</span></div>
+      <div class="d">${esc(s.detail)}</div>
+      <div class="e">${esc(s.posture_label)} &middot; ${(s.evidence || []).map(esc).join(' &middot; ')}</div>
+    </div>`).join('');
+}
+
+function memoryCards(memories, empty) {
+  if (!memories || !memories.length) return `<p class="tiny muted">${esc(empty)}</p>`;
+  return memories.map((x) => `
+    <div class="sig p-memory"><div class="t"><span>${esc(x.kind)} memory</span>
+      <span class="lr">sim ${x.similarity.toFixed(2)}</span></div>
+      <div class="d">${esc(x.text)}</div>
+      <div class="e">${esc(x.source)} &middot; confidence ${x.confidence}</div></div>`).join('');
+}
+
+const REC_LABEL = {
+  approve: 'Approve', conditions: 'Approve with conditions',
+  escalate: 'Review', decline: 'Decline',
+};
+
+const ASSESS_CATS = [
+  ['saas', 'SaaS'], ['ai_product', 'AI product'], ['digital_goods', 'Digital goods'],
+  ['templates_plugins_apps', 'Templates & plugins'],
+  ['ebooks_publications', 'Ebooks & publications'],
+  ['marketing_outreach', 'Marketing outreach'],
+  ['ai_content_generation', 'AI content generation'],
+];
+const ASSESS_COUNTRIES = ['US', 'IN', 'GB', 'DE', 'SG', 'AE', 'BR', 'NL', 'PL', 'CA', 'AU', 'NG', 'EE'];
+const ASSESS_EXAMPLES = [
+  { name: 'Lumen Labs', note: 'linked to a terminated merchant' },
+  { name: 'Kindle Grove', note: 'catalogue / rights case' },
+  { name: 'Thistle Forge', note: 'clean applicant' },
+];
+
+function viewAssess() {
+  if (state.assessResult) return viewAssessResult(state.assessResult);
+  return viewAssessForm();
+}
+
+function viewAssessForm() {
+  return head('Assess a merchant',
+    'Start a new assessment. The system runs the same deterministic engine used on the queue — it recommends; you decide. Evaluations holds the cases already waiting.')
+  + `<div class="card assess-card"><h3>Application</h3>
+      <p class="tiny muted" style="margin:-4px 0 14px">Name is enough to reassess someone already on file.
+        New merchants also need a purpose. We look the company up on the public web
+        (Wikipedia / DuckDuckGo) and run the same engine as the queue — it recommends; you decide.</p>
+      <form id="assess-form">
+        <div class="fields">
+          <div class="field span"><label for="aname">Merchant name</label>
+            <input id="aname" name="name" required autocomplete="off"
+                   placeholder="e.g. Lumen Labs"></div>
+          <div class="field"><label for="acat">Category</label>
+            <select id="acat" name="category">${ASSESS_CATS.map(([v, l]) =>
+              `<option value="${v}">${esc(l)}</option>`).join('')}</select></div>
+          <div class="field"><label for="actry">Country</label>
+            <select id="actry" name="country">${ASSESS_COUNTRIES.map((c) =>
+              `<option value="${c}"${c === 'US' ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
+          <div class="field"><label for="avol">Monthly volume (USD)</label>
+            <input id="avol" name="volume" type="number" min="0" step="100" placeholder="0 if not live yet"></div>
+          <div class="field"><label for="alim">Requested exposure / limit (USD)</label>
+            <input id="alim" name="requested_limit" type="number" min="0" step="100" placeholder="optional"></div>
+          <div class="field span"><label for="apur">Purpose / product</label>
+            <textarea id="apur" name="purpose" placeholder="What they sell, and how they charge."></textarea></div>
+        </div>
+        <p class="tiny muted" style="margin:12px 0 8px">Try an existing applicant to see memory and graph context:</p>
+        <div class="chips">${ASSESS_EXAMPLES.map((ex) =>
+          `<button type="button" data-fill="${esc(ex.name)}">${esc(ex.name)}
+            <span class="muted"> · ${esc(ex.note)}</span></button>`).join('')}</div>
+        <div class="actions">
+          <button class="btn-primary" id="arun" type="submit">${svg('shield')} Run Assessment</button>
+        </div>
+        <p class="err tiny" id="aerr" hidden></p>
+      </form></div>`;
+}
+
+function viewAssessResult(b) {
+  const m = b.merchant, d = b.decision;
+  const rec = d.recommendation;
+  const recText = REC_LABEL[rec] || d.headline;
+  const relatedEmpty = '<p class="tiny muted">No related entities found.</p>';
+  const confirm = b.decisionRecorded;
+  const decided = (m.status && m.status !== 'pending') || !!confirm;
+  const gap = d.threshold - d.p_bad;
+  const vsLine = gap >= 0
+    ? `${pct(d.p_bad)} chance of going bad — ${pct(gap)} below the decline line.`
+    : `${pct(d.p_bad)} chance of going bad — ${pct(-gap)} above the decline line.`;
+  const toneChip = { ok: 'ok', warn: 'warn', high: 'high', bad: 'bad' }[b.risk_band_tone] || 'mute';
+
+  return head(esc(m.name) + (m.real ? ' <span class="real">Dodo customer</span>' : ''),
+    `${esc(m.domain)} · ${esc(m.country)} · ${esc(title(m.category_claimed))}`
+    + (b.created ? ' · <span class="chip c-mute">new application</span>' : '')
+    + ` · <span class="chip c-mute">${esc(m.status)}</span>`,
+    `<button class="btn ghost small" id="assess-back">${
+      state.assessFrom === 'history' ? '← Assessment history'
+      : state.assessFrom === 'cases' ? '← Evaluations'
+      : 'New assessment'}</button>`)
+  + `<div class="brief"><div>
+      <div class="verdict rec-card ${esc(rec)}">
+        <div class="rec-hero">
+          <div class="rec-call">
+            <div class="mono tiny muted">SYSTEM RECOMMENDATION</div>
+            <div class="rec-title">
+              <div class="h">${esc(recText)}</div>
+              <span class="chip c-${esc(toneChip)}">${esc(b.risk_band)}</span>
+            </div>
+            <p class="rec-vs">${esc(vsLine)}</p>
+          </div>
+          <div class="rec-compare">
+            <div>
+              <b>${pct(d.p_bad)}</b>
+              <span>P(bad)</span>
+            </div>
+            <i>vs</i>
+            <div>
+              <b>${pct(d.threshold)}</b>
+              <span>Decline line</span>
+            </div>
+          </div>
+        </div>
+        ${pBadMeter(d.p_bad, d.threshold, b.risk_band_tone)}
+        ${recChain(d)}
+        ${recCosts(d)}
+        ${webCard(b.web)}
+        ${(b.why || []).length || b.explanation ? `<div class="rec-why">
+          <h3>Why this recommendation?</h3>
+          ${(b.why || []).length ? `<ul class="rec-points">${b.why.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+          ${b.explanation ? `<p>${esc(b.explanation).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>` : ''}
+        </div>` : ''}
+      </div>
+
+      <div class="card"><h3>Risk signals<span class="hint">${(b.signals || []).length} fired</span></h3>
+        ${signalCards(b.signals, 'No signals fired.')}</div>
+
+      <div class="card"><h3>Relevant memory<span class="hint">what the platform already believes</span></h3>
+        ${memoryCards(b.memories, 'No relevant historical memory found.')}
+        ${b.precedent && b.precedent.length ? `<div class="scroll" style="margin-top:12px"><table>
+          <thead><tr><th>Closest cases</th><th>Sim</th><th>Outcome</th></tr></thead><tbody>
+          ${b.precedent.map((p) => `<tr>
+            <td><strong>${esc(p.name)}</strong><div class="tiny muted">${esc((p.outcome || p.status).slice(0, 90))}</div></td>
+            <td class="num tiny">${p.similarity.toFixed(2)}</td>
+            <td><span class="chip ${p.went_bad ? 'c-bad' : p.status === 'declined' ? 'c-warn' : 'c-ok'}">${
+              p.went_bad ? 'went bad' : esc(p.status)}</span></td></tr>`).join('')}
+          </tbody></table></div>
+          <p class="tiny muted" style="margin:11px 0 0">${esc(d.precedent_note)}</p>`
+          : `<p class="tiny muted" style="margin:10px 0 0">${esc(d.precedent_note || 'No comparable historical cases retrieved.')}</p>`}
+      </div>
+
+      <div class="card"><h3>Relationship / graph context</h3>
+        ${b.graph && b.graph.nodes && b.graph.nodes.length ? graphSvg(b.graph) : relatedEmpty}
+        ${b.related && b.related.length ? `<div class="scroll" style="margin-top:12px"><table>
+          <thead><tr><th>Related merchant</th><th>Status</th><th>Routes</th></tr></thead><tbody>
+          ${b.related.map((r) => `<tr><td><strong>${esc(r.name)}</strong></td>
+            <td><span class="chip ${r.status === 'terminated' ? 'c-bad' : 'c-mute'}">${esc(r.status)}</span></td>
+            <td class="tiny mono muted">${r.routes.map(esc).join('<br>')}</td></tr>`).join('')}
+          </tbody></table></div>` : ''}</div>
+    </div><div>
+      ${confirm ? `<div class="card"><h3>Analyst decision recorded</h3>
+        <p><span class="chip ${confirm.action === 'decline' ? 'c-bad' : confirm.action === 'approve' ? 'c-ok' : 'c-warn'}">${esc(REC_LABEL[confirm.action] || confirm.action)}</span>
+          ${confirm.reconciliation && confirm.reconciliation !== 'on file'
+            ? `Memory reconciled: ${esc(confirm.reconciliation)}.`
+            : 'On file — this is what memory learned from.'}</p>
+        <p class="tiny muted" style="margin:8px 0 12px">${esc(confirm.rationale)}</p>
+        <div class="actions">
+          <button class="btn" id="assess-to-history">Assessment history</button>
+          <button class="btn ghost" id="assess-change">Change decision</button>
+        </div></div>`
+      : `<div class="card"><h3>Analyst decision</h3>
+        <p class="tiny muted" style="margin:-4px 0 12px">The system recommended <strong>${esc(recText)}</strong>.
+          Your decision is recorded through the existing decision path and is what memory learns from.</p>
+        <textarea id="assess-rationale" placeholder="Required. Two lines on why — this is captured as memory."></textarea>
+        <p class="err tiny" id="aerr" hidden></p>
+        <div class="actions" id="assess-actions">
+          <button class="btn" data-assess-act="approve">Approve</button>
+          <button class="btn ghost" data-assess-act="escalate">Review</button>
+          <button class="btn danger" data-assess-act="decline">Decline</button>
+        </div>
+        ${decided ? `<p class="tiny muted" style="margin:10px 0 0">A decision is already on file
+          (${esc(m.status)}${m.decided_at ? `, ${esc(m.decided_at)}` : ''}). Submitting overwrites it.</p>` : ''}
+        </div>`}
+    </div></div>`;
+}
+
 /* ----------------------------------------------------------------- glue */
 const RENDER = {
-  dashboard: viewOverview, merchants: viewMerchants, cases: viewCases,
+  homepage: viewHomepage, merchants: viewMerchants, cases: viewCases,
   memory: viewMemory, graph: viewGraph, alerts: viewAlerts,
-  ask: viewAsk, history: viewHistory,
+  history: viewHistory, assess: viewAssess,
   // reachable by link, not tabs
   portfolio: viewPortfolio, queue: viewQueue, drift: viewDrift,
 };
 
 async function render() {
+  syncTopbar();
   const main = $('#main');
   main.innerHTML = '<div class="page"><div class="empty"><span class="spinner"></span>Loading…</div></div>';
   try {
@@ -840,7 +1067,7 @@ async function render() {
   if ($('#dirmount')) loadDirMount();
 }
 
-/* The Overview embeds the top of the directory; it loads after paint so the
+/* The Homepage embeds the top of the directory; it loads after paint so the
    rest of the page is not held up by a second request. */
 async function loadDirMount() {
   const mount = $('#dirmount');
@@ -851,9 +1078,209 @@ async function loadDirMount() {
   } catch { mount.innerHTML = '<div class="empty">Directory unavailable.</div>'; }
 }
 
+const ASSESS_STEPS = [
+  'Looking the company up on the public web',
+  'Checking merchant profile',
+  'Retrieving relevant memory',
+  'Evaluating risk signals',
+  'Building assessment',
+];
+
+function showAssessError(msg) {
+  const el = $('#aerr');
+  if (!el) { toast(msg); return; }
+  el.hidden = false;
+  el.textContent = msg;
+}
+
+function wireAssess() {
+  const back = $('#assess-back');
+  if (back) back.onclick = () => {
+    const from = state.assessFrom;
+    state.assessResult = null;
+    state.assessFrom = null;
+    go(from === 'history' || from === 'cases' ? from : 'assess');
+  };
+  const anew = $('#assess-new');
+  if (anew) anew.onclick = () => {
+    state.assessResult = null;
+    state.assessFrom = null;
+    go('assess');
+  };
+  const toHistory = $('#assess-to-history');
+  if (toHistory) toHistory.onclick = () => go('history');
+  const change = $('#assess-change');
+  if (change) change.onclick = () => {
+    if (state.assessResult) state.assessResult.decisionRecorded = null;
+    render();
+  };
+
+  document.querySelectorAll('[data-fill]').forEach((b) => {
+    b.onclick = () => {
+      const name = b.dataset.fill;
+      const input = $('#aname');
+      if (input) input.value = name;
+      const purpose = $('#apur');
+      if (purpose && !purpose.value.trim()) {
+        purpose.placeholder = 'Existing merchant — purpose is optional';
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-assess-act]').forEach((b) => {
+    b.onclick = async () => {
+      const rationale = ($('#assess-rationale') || {}).value || '';
+      if (!rationale.trim()) {
+        showAssessError('A rationale is required — it is what memory learns from.');
+        return;
+      }
+      const id = state.assessResult && (state.assessResult.merchant_id
+        || (state.assessResult.merchant && state.assessResult.merchant.id));
+      if (!id) { showAssessError('Missing merchant id — run the assessment again.'); return; }
+      document.querySelectorAll('[data-assess-act]').forEach((x) => { x.disabled = true; });
+      try {
+        const r = await post('/api/decide', {
+          merchant_id: id, action: b.dataset.assessAct, rationale,
+        });
+        if (r.error) throw new Error(r.error);
+        state.assessResult.decisionRecorded = {
+          action: b.dataset.assessAct,
+          rationale,
+          reconciliation: (r.reconciliation && r.reconciliation.action) || 'recorded',
+        };
+        state.assessResult.merchant.status =
+          { approve: 'approved', conditions: 'approved', decline: 'declined', escalate: 'pending' }[b.dataset.assessAct]
+          || 'pending';
+        state.portfolio = await api('/api/portfolio');
+        const who = (state.assessResult.merchant && state.assessResult.merchant.name) || 'merchant';
+        toast(`${REC_LABEL[b.dataset.assessAct] || b.dataset.assessAct} recorded for ${who}.`);
+        go('history');
+      } catch (e) {
+        document.querySelectorAll('[data-assess-act]').forEach((x) => { x.disabled = false; });
+        showAssessError('Could not record the decision: ' + e.message);
+      }
+    };
+  });
+
+  const form = $('#assess-form');
+  if (!form) return;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const name = ($('#aname') || {}).value.trim();
+    if (!name) { showAssessError('Merchant name is required.'); return; }
+    const purpose = ($('#apur') || {}).value.trim();
+    const volume = ($('#avol') || {}).value;
+    const limit = ($('#alim') || {}).value;
+    const category = ($('#acat') || {}).value;
+    const country = ($('#actry') || {}).value;
+    const known = ASSESS_EXAMPLES.some((ex) => ex.name.toLowerCase() === name.toLowerCase());
+    if (!purpose && !known) {
+      showAssessError('Purpose is required for a new merchant so memory has something to match.');
+      return;
+    }
+    const run = $('#arun');
+    if (run) { run.disabled = true; run.innerHTML = '<span class="spinner"></span>Assessing…'; }
+    const err = $('#aerr'); if (err) err.hidden = true;
+    const card = form.closest('.card') || form;
+    let step = 0;
+    card.innerHTML = `<div class="assess-wait">
+      <div class="empty"><span class="spinner"></span>Assessing merchant…</div>
+      <ul class="steps">${ASSESS_STEPS.map((s, i) =>
+        `<li class="${i === 0 ? 'on' : ''}">${esc(s)}</li>`).join('')}</ul>
+      <p class="tiny muted" style="text-align:center">One request — profile, memory, signals, then the brief.</p>
+    </div>`;
+    const timer = setInterval(() => {
+      step = (step + 1) % ASSESS_STEPS.length;
+      card.querySelectorAll('.steps li').forEach((li, i) => li.classList.toggle('on', i === step));
+    }, 450);
+    try {
+      const r = await post('/api/assess', {
+        name, category, country,
+        volume: volume ? Number(volume) : 0,
+        requested_limit: limit ? Number(limit) : 0,
+        purpose,
+        explain: true,
+        web: true,
+      });
+      clearInterval(timer);
+      if (r.error) throw new Error(r.error);
+      if (!r.decision || !r.merchant) throw new Error('Malformed assessment response.');
+      state.assessResult = r;
+      state.portfolio = await api('/api/portfolio');
+      renderNav(); render();
+    } catch (ex) {
+      clearInterval(timer);
+      toast('Assessment failed.');
+      state.assessResult = null;
+      render();
+      setTimeout(() => showAssessError(
+        ex.message === 'Failed to fetch'
+          ? 'Server unavailable. Is the demo running?'
+          : String(ex.message || ex)
+      ), 0);
+    }
+  };
+}
+
+function statusAction(status) {
+  return { declined: 'decline', approved: 'approve', terminated: 'decline' }[status] || null;
+}
+
+function hydrateAssessRow(row) {
+  const src = row.brief || {};
+  const brief = Object.assign({}, src);
+  if (src.merchant) brief.merchant = Object.assign({}, src.merchant);
+  const m = brief.merchant || {};
+  const action = row.decision_action
+    || (src.decisionRecorded && src.decisionRecorded.action)
+    || (m.decided_by === 'analyst.you' ? statusAction(m.status) : null);
+  const rationale = row.decision_rationale
+    || (src.decisionRecorded && src.decisionRecorded.rationale)
+    || m.rationale
+    || '';
+  if (action) {
+    brief.decisionRecorded = {
+      action,
+      rationale,
+      reconciliation: (src.decisionRecorded && src.decisionRecorded.reconciliation) || 'on file',
+    };
+  }
+  return brief;
+}
+
+async function openAssessment(row) {
+  if (!row) { toast('Assessment no longer in this session.'); return; }
+  let packed = {
+    decision_action: row.decision_action,
+    decision_rationale: row.decision_rationale,
+    brief: row.brief || row,
+  };
+  const mid = row.merchant_id
+    || packed.brief.merchant_id
+    || (packed.brief.merchant && packed.brief.merchant.id);
+  if (mid) {
+    try {
+      const live = await api('/api/brief/' + encodeURIComponent(mid));
+      if (live && live.merchant) {
+        packed.brief = Object.assign({}, packed.brief, { merchant: live.merchant });
+        if (!packed.decision_action && live.merchant.decided_by === 'analyst.you') {
+          packed.decision_action = statusAction(live.merchant.status);
+          packed.decision_rationale = packed.decision_rationale || live.merchant.rationale;
+        }
+      }
+    } catch { /* snapshot is enough */ }
+  }
+  state.assessFrom = state.view === 'cases' ? 'cases' : 'history';
+  state.assessResult = hydrateAssessRow(packed);
+  go('assess');
+}
+
 let dirTimer;
 function wire() {
-  document.querySelectorAll('tr.click, .rowitem[data-id]').forEach((el) =>
+  document.querySelectorAll('[data-open-assess]').forEach((tr) => {
+    tr.onclick = () => openAssessment((state.assessmentIndex || {})[tr.dataset.openAssess]);
+  });
+  document.querySelectorAll('tr.click[data-id], .rowitem[data-id]').forEach((el) =>
     el.onclick = () => { state.briefId = el.dataset.id; render(); });
   document.querySelectorAll('[data-view]').forEach((el) => {
     if (el.closest('#nav')) return;
@@ -878,10 +1305,12 @@ function wire() {
   if (band) band.onchange = () => { state.dir.band = band.value; state.dir.page = 0; render(); };
 
   const nw = $('#newapp');
-  if (nw) nw.onclick = () => go('cases');
+  if (nw) nw.onclick = () => { state.assessResult = null; state.assessFrom = null; go('assess'); };
 
   const back = $('#back');
   if (back) back.onclick = () => go(state.view);
+
+  wireAssess();
 
   document.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     const rationale = ($('#rationale') || {}).value || '';
@@ -892,45 +1321,8 @@ function wire() {
     });
     toast(`Recorded. Memory reconciled: ${r.reconciliation.action}.`);
     state.portfolio = await api('/api/portfolio');
-    go(state.view === 'ask' ? 'ask' : 'cases');
+    go('cases');
   });
-
-  const say = $('#say'), send = $('#send');
-  if (send) {
-    const submit = async () => {
-      const text = say.value.trim();
-      if (!text) return;
-      send.disabled = true;
-      send.innerHTML = '<span class="spinner"></span>Thinking';
-      const thread = $('#thread');
-      if (thread.querySelector('.empty')) thread.innerHTML = '';
-      thread.insertAdjacentHTML('beforeend',
-        `<div class="turn you"><div class="who">you</div><div class="bubble">${esc(text)}</div></div>`);
-      say.value = '';
-      try {
-        const t = await post('/api/ask', { text });
-        thread.lastElementChild.remove();
-        thread.insertAdjacentHTML('beforeend', turnHtml({ you: text, ...t }));
-        thread.lastElementChild.scrollIntoView({ block: 'nearest' });
-        if (t.memory_action) {
-          state.portfolio = await api('/api/portfolio');
-          renderNav();
-        }
-      } catch (e) { toast('Could not reach memory: ' + e.message); }
-      send.disabled = false;
-      send.textContent = 'Send';
-      say.focus();
-    };
-    send.onclick = submit;
-    say.onkeydown = (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
-        e.preventDefault(); submit();
-      }
-    };
-    document.querySelectorAll('[data-prompt]').forEach((b) => b.onclick = () => {
-      say.value = PROMPTS[+b.dataset.prompt]; say.focus();
-    });
-  }
 
   const run = $('#run');
   if (run) run.onclick = async () => {
@@ -965,7 +1357,7 @@ $('#reset').onclick = async () => {
   state.portfolio = await api('/api/portfolio');
   state.dir = { q: '', band: '', page: 0 };
   toast('Demo reset to its initial state.');
-  go('dashboard');
+  go('homepage');
 };
 
 (async function boot() {

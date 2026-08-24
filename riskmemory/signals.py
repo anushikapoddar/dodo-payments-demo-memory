@@ -216,6 +216,39 @@ def profile_text(m: Merchant) -> str:
                      m.observed_category or "", " ".join(m.fulfilment)])
 
 
+def _risk_themes(m: Merchant) -> set[str]:
+    from .websearch import match_themes
+    seen: set[str] = set()
+    blob = " ".join([
+        m.name or "",
+        getattr(m, "pitch", "") or "",
+        getattr(m, "offering_claimed", "") or "",
+        getattr(m, "category_claimed", "") or "",
+    ])
+    for hit in match_themes(blob):
+        seen.add(hit["theme"])
+    report = getattr(m, "web_report", None) or {}
+    for hit in report.get("themes") or []:
+        theme = hit.get("theme")
+        if theme:
+            seen.add(theme)
+    return seen
+
+
+def memory_trigger(m: Merchant) -> str:
+    """Retrieval key for analyst episodic memory and session precedent.
+
+    Pitch alone is too brittle — “casino king” and “gambler ninjas” with
+    different wording never match. Fold in the name and any gambling / adult /
+    crypto themes surfaced from copy or the open-web lookup so a decline in
+    the same vertical heats the next applicant even when the prose differs.
+    """
+    parts = [profile_text(m), m.name or ""]
+    for theme in sorted(_risk_themes(m)):
+        parts.append(theme)
+    return " ".join(p for p in parts if p)
+
+
 def detect_memory(m: Merchant, store, threshold: float = 0.13) -> list[Signal]:
     """Signals contributed by distilled semantic memory.
 
@@ -265,6 +298,95 @@ def detect_memory(m: Merchant, store, threshold: float = 0.13) -> list[Signal]:
             evidence=[f"similarity {sim:.2f}", f"confidence {mem.confidence:.2f}",
                       f"source: {mem.source}"],
         ))
+
+    # 3) analyst decisions this session — episodic, not distilled. A decline
+    # of Nightline Casino should heat the next similar casino, not sit inert
+    # in the memory list. Seed case-file notes are excluded (source is not
+    # an analyst); the merchant is not scored against its own decision.
+    hits = store.search(memory_trigger(m), limit=4, kind="episodic", promoted_only=True)
+    themes = _risk_themes(m)
+    for mem, sim in hits:
+        if mem.id in seen or mem.subject == m.id:
+            continue
+        if mem.polarity != "adverse":
+            continue
+        if not str(mem.source or "").startswith("analyst"):
+            continue
+        theme_match = bool(mem.category and mem.category in themes)
+        floor = 0.10 if theme_match else config.PRECEDENT_MIN_SIMILARITY
+        if sim < floor:
+            continue
+        seen.add(mem.id)
+        lr = 1.0 + (mem.confidence * 12.0) * min(sim / 0.35, 1.0)
+        out.append(Signal(
+            id=f"memory:{mem.id}", posture="memory",
+            category=mem.category or "precedent",
+            title="Matches a prior analyst decline",
+            detail=mem.text,
+            lr=round(lr, 2),
+            evidence=[f"similarity {sim:.2f}", f"confidence {mem.confidence:.2f}",
+                      f"source: {mem.source}"],
+        ))
+    return out
+
+
+def detect_copy(m: Merchant) -> list[Signal]:
+    """Risk language in the name or purpose — works even when the web is down."""
+    from .websearch import match_themes
+    blob = " ".join([
+        m.name,
+        getattr(m, "pitch", "") or "",
+        getattr(m, "offering_claimed", "") or getattr(m, "offering_claimed", "") or "",
+        getattr(m, "category_claimed", "") or getattr(m, "category_claimed", "") or "",
+    ])
+    out: list[Signal] = []
+    for theme in match_themes(blob):
+        out.append(Signal(
+            id=f"copy:{theme['theme']}", posture="deceiving",
+            category=theme["theme"],
+            title=f"Application copy matches {theme['theme'].replace('_', ' ')}",
+            detail=(f"The name or purpose contains “{theme['matched']}”, which is "
+                    "over-represented among merchants that later went bad."),
+            lr=theme["lr"],
+            evidence=[f"matched: {theme['matched']}"],
+        ))
+    return out
+
+
+def detect_web(m: Merchant) -> list[Signal]:
+    """Signals from a public-web lookup attached to the merchant for this run."""
+    report = getattr(m, "web_report", None) or {}
+    hits = report.get("hits") or []
+    themes = report.get("themes") or []
+    out: list[Signal] = []
+    if report.get("status") == "empty":
+        out.append(Signal(
+            id="web:thin", posture="deceiving", category="thin_identity",
+            title="No public web footprint found",
+            detail=("Wikipedia and DuckDuckGo returned nothing under this name. "
+                    "A brand-new or invented identity is weakly over-represented "
+                    "among bust-out applications — not proof of fraud on its own."),
+            lr=1.45,
+            evidence=[f"query: {report.get('query') or m.name}"],
+        ))
+        return out
+    seen = set()
+    for theme in themes:
+        if theme["theme"] in seen:
+            continue
+        seen.add(theme["theme"])
+        src = next((h.get("title") for h in hits
+                    if theme["matched"] in f"{h.get('title','')} {h.get('snippet','')}".lower()),
+                   (hits[0].get("title") if hits else "open web"))
+        out.append(Signal(
+            id=f"web:{theme['theme']}", posture="deceiving",
+            category=theme["theme"],
+            title=f"Open web: {theme['theme'].replace('_', ' ')}",
+            detail=(f"Public pages about this name mention “{theme['matched']}” "
+                    f"(e.g. {src})."),
+            lr=round(theme["lr"] * 0.85, 2),
+            evidence=[h.get("url") or h.get("title") or "" for h in hits[:3]],
+        ))
     return out
 
 
@@ -274,5 +396,7 @@ def detect_all(m: Merchant, graph: ContextGraph, by_id: dict[str, Merchant],
             + detect_drifting(m, graph, by_id)
             + detect_failing(m, graph, by_id, portfolio_volume)
             + detect_attacked(m, graph, by_id)
+            + detect_copy(m)
+            + detect_web(m)
             + detect_memory(m, store))
     return sorted(sigs, key=lambda s: -s.lr)

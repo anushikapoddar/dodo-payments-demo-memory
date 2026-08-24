@@ -82,6 +82,9 @@ class Merchant:
     #: and dispute figures are illustrative. See REAL_CUSTOMERS and the guard in
     #: build() -- a real merchant may never carry an adverse finding.
     real: bool = False
+    #: Analyst declined this merchant in the live session. Distinct from
+    #: authored ``truth_bad`` so seed declines do not rewrite the prior.
+    learned_bad: bool = False
 
     def vamp_ratio(self) -> float:
         if self.settled_txns <= 0:

@@ -14,6 +14,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .app import App
+from .explain import load_dotenv, llm_status
+
+load_dotenv()
 
 mimetypes.add_type("image/webp", ".webp")
 
@@ -95,8 +98,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(STATE.drift())
             if path == "/api/memory":
                 return self._json(STATE.memory_list())
-            if path == "/api/transcript":
-                return self._json(STATE.transcript())
+            if path == "/api/assessments":
+                return self._json(STATE.assessments())
             if path == "/api/gate-history":
                 return self._json(STATE.gate_history)
             if path == "/api/incidents":
@@ -116,6 +119,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         payload = self._body()
+        if path == "/api/assess":
+            with LOCK:
+                out = STATE.assess(payload)
+            if not out.get("error") and payload.get("explain"):
+                from .explain import explain_assessment
+                out["explanation"] = explain_assessment(out)
+                log = STATE.assessment_log
+                if log and log[0].get("merchant_id") == out.get("merchant_id"):
+                    log[0]["brief"] = out
+            return self._json(out, 400 if out.get("error") else 200)
         with LOCK:
             if path == "/api/decide":
                 return self._json(STATE.record_decision(
@@ -123,8 +136,6 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("rationale", "")))
             if path == "/api/ingest":
                 return self._json(STATE.ingest_incident(payload.get("merchant_id", "")))
-            if path == "/api/ask":
-                return self._json(STATE.ask(payload.get("text", "")))
             if path == "/api/replay":
                 return self._json(STATE.replay_now())
             if path == "/api/reset":
@@ -142,6 +153,7 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) 
           f"  |  {p['alert_total']} open alerts")
     print(f"  graph: {p['graph']['nodes']:,} nodes, {p['graph']['edges']:,} edges"
           f"  |  memory: {p['memory']['active']} active records")
+    print(f"  llm: {llm_status()}")
     print(f"\n  -> {url}\n  Ctrl-C to stop\n")
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

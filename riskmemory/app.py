@@ -5,15 +5,14 @@ import datetime as _dt
 from typing import Optional
 
 from . import config
-from .converse import Conversation
-from .corpus import Merchant, build, summary
+from .corpus import Merchant, _hash, build, summary
 from .decision import decide
 from .graph import ContextGraph
 from .memory import MemoryStore
 from .monitor import build_alerts, drift_cases
 from .replay import distil, replay, run_gate
 from .retrieval import TfIdf
-from .signals import detect_all, profile_text
+from .signals import detect_all, memory_trigger, profile_text, _risk_themes
 
 
 class App:
@@ -40,8 +39,8 @@ class App:
 
         self.gate_history: list[dict] = []
         self.activity: list[dict] = []       # feeds the summary-bar digest
+        self.assessment_log: list[dict] = []  # every /api/assess in this process
         self._seed_memory()
-        self.conversation = Conversation(self)
         for a in self.alerts()[:4]:
             self._log("alert", f"{a.merchant} — {a.title}", a.posture_label)
 
@@ -126,6 +125,7 @@ class App:
             "last_reconciled": (self.activity[0]["at"] if self.activity else None),
             "queue_size": sum(1 for m in self.merchants if m.status == "pending"),
             "real_customers": sum(1 for m in self.merchants if m.real),
+            "assessment_count": len(self.assessment_log),
             "threshold": round(config.DECLINE_THRESHOLD, 4),
             "cost_ratio": round(
                 config.COST_FALSE_APPROVE_USD / config.COST_FALSE_DECLINE_USD, 1),
@@ -161,9 +161,209 @@ class App:
         corpus sits at 0.24 and above; below the floor the shared vocabulary is
         the corpus's, not the merchant's.
         """
-        hits = self.cases.search(profile_text(m), limit=limit + 1, exclude=[m.id])
+        hits = self.cases.search(memory_trigger(m), limit=limit + 1, exclude=[m.id])
         return [(self.by_id[i], s) for i, s in hits
                 if i in self.by_id and s >= config.PRECEDENT_MIN_SIMILARITY][:limit]
+
+    def _band_for(self, p_bad: float) -> tuple[str, str]:
+        for name, lo, hi, tone in self.RISK_BANDS:
+            if lo <= p_bad < hi:
+                return name, tone
+        return self.RISK_BANDS[-1][0], self.RISK_BANDS[-1][3]
+
+    def _why(self, brief: dict) -> list[str]:
+        """Deterministic explanation lines from evidence already in the brief."""
+        why: list[str] = []
+        for s in brief.get("signals") or []:
+            title, detail = (s.get("title") or "").strip(), (s.get("detail") or "").strip()
+            if title and detail:
+                why.append(f"{title}: {detail}")
+            elif title or detail:
+                why.append(title or detail)
+        note = (brief.get("decision") or {}).get("precedent_note") or ""
+        if note:
+            why.append(note)
+        if why:
+            return why
+        d = brief.get("decision") or {}
+        return [(
+            f"No signals fired. The recommendation is the base rate "
+            f"({d.get('prior', 0):.1%}) against the operating point "
+            f"(P(bad) ≥ {d.get('threshold', 0):.1%})."
+        )]
+
+    def _resolve_applicant(self, payload: dict) -> tuple[Optional[Merchant], bool, Optional[str]]:
+        """Find an existing merchant, or admit a new pending applicant.
+
+        Assessment never records approve/review/decline. A newly admitted
+        merchant stays ``pending`` until ``record_decision`` runs.
+        """
+        mid = str(payload.get("merchant_id") or "").strip()
+        if mid:
+            m = self.by_id.get(mid)
+            if m is None:
+                return None, False, "unknown merchant"
+            return m, False, None
+
+        name = str(payload.get("name") or "").strip()
+        if not name:
+            return None, False, "merchant name is required"
+
+        matches = [m for m in self.merchants if m.name.lower() == name.lower()]
+        if matches:
+            matches.sort(key=lambda m: (0 if m.status == "pending" else 1, m.id))
+            return matches[0], False, None
+
+        pitch = str(payload.get("purpose") or payload.get("pitch") or "").strip()
+        if not pitch:
+            return None, False, "purpose is required for a new merchant"
+        return self._admit_applicant(payload, name, pitch), True, None
+
+    def _admit_applicant(self, payload: dict, name: str, pitch: str) -> Merchant:
+        allowed = config.POLICY_ACCEPTED | config.POLICY_RESTRICTED | config.POLICY_PROHIBITED
+        category = str(payload.get("category") or "saas").strip()
+        if category not in allowed:
+            category = "saas"
+        raw_country = str(payload.get("country") or "US").strip().upper()
+        country = raw_country if len(raw_country) == 2 and raw_country.isalpha() else "US"
+
+        def _num(key: str, default: float = 0.0) -> float:
+            try:
+                return float(payload.get(key) or 0)
+            except (TypeError, ValueError):
+                return default
+
+        forecast = _num("requested_limit") or _num("volume") or _num("forecast_monthly")
+        slug = "".join(ch for ch in name.lower() if ch.isalnum())[:18] or "applicant"
+        nid = "ma" + _hash("assess-admit", name.lower(), category, country)
+        if nid in self.by_id:
+            return self.by_id[nid]
+
+        m = Merchant(
+            id=nid, name=name, domain=f"{slug}.app", country=country,
+            founder=f"{name} operator", founder_email=f"ops@{slug}.app",
+            category_claimed=category, pitch=pitch,
+            offering_claimed=pitch[:80],
+            applied_at=config.DEMO_TODAY, domain_age_days=30,
+            registrar="Cloudflare", nameserver="ns.cloudflare",
+            site_template=f"tpl-assess-{slug}",
+            terms_hash=_hash("terms", nid),
+            payout_iban=f"{country} •••• {abs(hash(nid)) % 9000 + 1000}",
+            payout_branch="Assess / New-01", payout_holder=name.upper(),
+            fulfilment=["email"], status="pending",
+            forecast_monthly=forecast,
+        )
+        self.merchants.append(m)
+        self.by_id[m.id] = m
+        self.graph.ingest(m)
+        return m
+
+    def assess(self, payload: dict) -> dict:
+        """Run the existing engine without recording a human decision.
+
+        Reuses ``detect_all``, ``decide``, memory search and the context graph
+        via ``brief``. Status, rationale and memory reconciliation are left
+        to ``record_decision``.
+        """
+        merchant, created, err = self._resolve_applicant(payload or {})
+        if err:
+            return {"error": err}
+
+        from . import websearch
+        if websearch.enabled(payload):
+            report = websearch.lookup(
+                merchant.name, merchant.country, merchant.pitch)
+        else:
+            report = websearch.skipped("disabled")
+        merchant.web_report = report
+
+        brief = self.brief(merchant.id)
+        if not brief:
+            return {"error": "not found"}
+        d = brief["decision"]
+        band, tone = self._band_for(d["p_bad"])
+        out = {
+            **brief,
+            "merchant_id": merchant.id,
+            "created": created,
+            "risk_band": band,
+            "risk_band_tone": tone,
+            "why": self._why(brief),
+            "web": report,
+        }
+        self._log_assessment(out)
+        return out
+
+    def assessments(self) -> list[dict]:
+        return [self._assessment_view(row) for row in self.assessment_log]
+
+    def _assessment_view(self, row: dict) -> dict:
+        """History row with the live analyst call, not the frozen assess snapshot."""
+        item = dict(row)
+        mid = item.get("merchant_id")
+        m = self.by_id.get(mid) if mid else None
+        action = item.get("decision_action")
+        rationale = item.get("decision_rationale")
+        if m and not action and m.decided_by == "analyst.you":
+            action = {"declined": "decline", "approved": "approve",
+                      "terminated": "decline"}.get(m.status)
+            rationale = rationale or m.rationale
+            if action:
+                item["decision_action"] = action
+                item["decision_rationale"] = rationale
+        elif action and not rationale and m:
+            item["decision_rationale"] = m.rationale
+        return item
+
+    def _stamp_assessment_log(self, merchant_id: str, action: str, rationale: str,
+                              recorded: dict) -> None:
+        for row in self.assessment_log:
+            if row.get("merchant_id") != merchant_id:
+                continue
+            row["decision_action"] = action
+            row["decision_rationale"] = rationale
+            brief = row.get("brief")
+            if not isinstance(brief, dict):
+                continue
+            mer = brief.get("merchant")
+            if isinstance(mer, dict):
+                live = self.by_id.get(merchant_id)
+                if live:
+                    mer.update({
+                        "status": live.status,
+                        "rationale": live.rationale,
+                        "decided_at": live.decided_at,
+                        "decided_by": live.decided_by,
+                    })
+            brief["decisionRecorded"] = recorded
+
+    def _log_assessment(self, out: dict) -> None:
+        m = out.get("merchant") or {}
+        d = out.get("decision") or {}
+        web = out.get("web") or {}
+        entry = {
+            "id": f"as{len(self.assessment_log) + 1:04d}",
+            "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+            "merchant_id": out.get("merchant_id") or m.get("id"),
+            "name": m.get("name"),
+            "domain": m.get("domain"),
+            "country": m.get("country"),
+            "created": bool(out.get("created")),
+            "p_bad": d.get("p_bad"),
+            "recommendation": d.get("recommendation"),
+            "headline": d.get("headline"),
+            "risk_band": out.get("risk_band"),
+            "signals": len(out.get("signals") or []),
+            "web_status": web.get("status"),
+            "web_hits": len(web.get("hits") or []),
+            "web_query": web.get("query"),
+            "decision_action": None,
+            "decision_rationale": None,
+            "brief": out,
+        }
+        self.assessment_log.insert(0, entry)
+        self._log("assess", f"{m.get('name')} → {d.get('headline')}",
+                  f"P(bad) {d.get('p_bad')}")
 
     def brief(self, merchant_id: str) -> Optional[dict]:
         m = self.by_id.get(merchant_id)
@@ -183,7 +383,7 @@ class App:
                 "outcome": ("terminated -- " + (other.truth_note or "")
                             if other.status == "terminated"
                             else other.status),
-                "went_bad": other.truth_bad,
+                "went_bad": bool(other.truth_bad or other.learned_bad),
                 "shared_terms": self.cases.overlap_terms(
                     profile_text(m), profile_text(other)),
                 "rationale": other.rationale,
@@ -247,15 +447,25 @@ class App:
         m.rationale = rationale.strip() or f"{action} (no rationale given)"
 
         polarity = "adverse" if action == "decline" else "clearing"
+        m.learned_bad = action == "decline"
+        themes = sorted(_risk_themes(m))
         rec = self.store.reconcile(
             f"{m.name}: {action} -- {m.rationale}",
-            trigger=profile_text(m), kind="episodic", subject=m.id,
-            category=None, polarity=polarity, confidence=0.9,
+            trigger=memory_trigger(m), kind="episodic", subject=m.id,
+            category=themes[0] if themes else None, polarity=polarity, confidence=0.9,
             source=analyst, observed_at=config.DEMO_TODAY, evidence=[m.id],
         )
+        if status in ("approved", "declined", "terminated"):
+            self.cases.add(m.id, memory_trigger(m))
         self._log("decision", f"{m.name} {status}",
                   (rationale or "").strip()[:110])
-        return {"ok": True, "status": status, "reconciliation": rec.to_dict()}
+        rec_d = rec.to_dict()
+        self._stamp_assessment_log(merchant_id, action, m.rationale, {
+            "action": action,
+            "rationale": m.rationale,
+            "reconciliation": rec_d.get("action") or "recorded",
+        })
+        return {"ok": True, "status": status, "reconciliation": rec_d}
 
     def ingest_incident(self, merchant_id: str) -> dict:
         """Confirm an outcome, distil a candidate memory, run the replay gate."""
@@ -395,7 +605,7 @@ class App:
                                  self.store), self._precedent(m)).p_bad
 
     def overview(self) -> dict:
-        """Everything the Overview screen renders."""
+        """Everything the Homepage screen renders."""
         from collections import Counter
         p = self.portfolio()
         active = [m for m in self.merchants if m.status == "approved"]
@@ -520,17 +730,6 @@ class App:
         return {"total": len(rows), "rows": rows[offset:offset + limit],
                 "offset": offset, "limit": limit,
                 "bands": [b[0] for b in self.RISK_BANDS]}
-
-    def ask(self, text: str) -> dict:
-        r = self.conversation.handle(text).to_dict()
-        act = (r.get("memory_action") or {}).get("action")
-        if act:
-            self._log("memory", f"You told it something — memory {act}",
-                      text.strip()[:110])
-        return r
-
-    def transcript(self) -> list[dict]:
-        return self.conversation.transcript
 
     def replay_now(self) -> dict:
         return replay(self.merchants, self.graph, self.by_id, self.store,

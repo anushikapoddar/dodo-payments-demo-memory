@@ -49,6 +49,10 @@ def _prob(o: float) -> float:
 
 
 def _counts_as_precedent(m: object) -> bool:
+    # An analyst decline recorded this session is an adverse outcome of the
+    # business we underwrote — count it even though it is not authored truth.
+    if getattr(m, "learned_bad", False):
+        return True
     if not getattr(m, "truth_bad", False):
         return False
     cat = getattr(m, "truth_category", None)
