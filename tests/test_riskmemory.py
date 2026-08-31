@@ -552,6 +552,18 @@ class TestApp(unittest.TestCase):
 class TestAssessDifferentiation(unittest.TestCase):
     """Dummy merchants must not all collapse to the 1.7% base rate."""
 
+    def setUp(self) -> None:
+        import os
+        import tempfile
+        self._assess_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+        self._assess_tmp.close()
+        os.environ["RISKMEMORY_ASSESSMENTS_FILE"] = self._assess_tmp.name
+
+    def tearDown(self) -> None:
+        import os
+        os.environ.pop("RISKMEMORY_ASSESSMENTS_FILE", None)
+        os.unlink(self._assess_tmp.name)
+
     def test_generic_saas_stays_near_the_base_rate(self):
         app = App()
         out = app.assess({
