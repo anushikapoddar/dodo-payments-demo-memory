@@ -114,6 +114,12 @@ class Handler(BaseHTTPRequestHandler):
                 # than an anonymous row from the background population.
                 out.sort(key=lambda d: (not d["scenario"], d["category"] or ""))
                 return self._json(out[:40])
+            if path == "/api/applications":
+                return self._json(STATE.applications())
+            if path.startswith("/api/applications/"):
+                row = STATE.application(path.rsplit("/", 1)[-1])
+                return self._json(row or {"error": "not found"},
+                                  200 if row else 404)
         self.send_error(404, "Unknown endpoint")
 
     def do_POST(self) -> None:

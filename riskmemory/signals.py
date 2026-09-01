@@ -138,6 +138,23 @@ def detect_drifting(m: Merchant, graph: ContextGraph,
             evidence=[f"refund rate {m.refund_rate*100:.1f}%",
                       f"{m.disputes} disputes on {m.settled_txns:,} settled"],
         ))
+
+    if _looks_like_education(m) and m.night_txn_share >= 0.55 and m.settled_txns >= 40:
+        _, abbr, _, _ = config.local_night_window(m.country)
+        night = config.local_night_label(m.country)
+        out.append(Signal(
+            id="hours_mismatch", posture="drifting", category="product_drift",
+            title=f"{m.night_txn_share*100:.0f}% of volume lands at night ({abbr})",
+            detail=("They underwrote as education sold through universities or schools. "
+                    "Campus-tied products concentrate in daytime in the merchant's "
+                    f"own timezone. Night is {night} — not UTC, not another market's "
+                    "evening. Night-heavy volume is the pattern of a different buyer, "
+                    "and often a different product."),
+            lr=round(4.0 + m.night_txn_share * 8.0, 2),
+            evidence=[f"night share {m.night_txn_share*100:.0f}% of {m.settled_txns:,} settled",
+                      f"local night window: {night}",
+                      f"claimed: {m.offering_claimed}"],
+        ))
     return out
 
 
@@ -330,6 +347,211 @@ def detect_memory(m: Merchant, store, threshold: float = 0.13) -> list[Signal]:
     return out
 
 
+def _looks_like_education(m: Merchant) -> bool:
+    blob = " ".join([
+        m.pitch or "", m.offering_claimed or "",
+        getattr(m, "signup_category", "") or "",
+        getattr(m, "tax_category", "") or "",
+        m.category_claimed or "",
+    ]).lower()
+    keys = ("edtech", "university", "universities", "school", "campus",
+            "exam prep", "lecture", "course", "curriculum", "student")
+    return any(k in blob for k in keys)
+
+
+_THIN_LAUNCH = (
+    "coming soon", "waitlist", "launching soon", "under construction",
+    "placeholder", "teaser", "pre-launch", "join the waitlist",
+)
+
+_SERVICE_COPY = (
+    "consulting", "freelance", "coaching", "custom design",
+    "done for you", "done-for-you", "hourly", "we will build",
+)
+
+_PHYSICAL_COPY = ("t-shirt", "shipped to you", "merchandise", "mug", "supplement")
+_GAMING_COPY = ("in-game currency", "game credits", "steam key", "roblox", "loot box")
+
+#: Markets named in copy. Used to catch "Indian entity, US-night students"
+#: at signup — the hours pattern before any volume exists.
+_MARKET_CUES: list[tuple[str, tuple[str, ...]]] = [
+    ("US", ("united states", "u.s.", "us high school", "us student",
+            "american universit", "eastern time", "pacific time",
+            "pm est", "pm pst", "8pm est", "9pm est", "est live",
+            "ap exam", "sat prep")),
+    ("GB", ("united kingdom", "gcse", "a-level", "uk student",
+            "british universit")),
+    ("IN", ("cbse", "jee", "neet", "indian universit", "ist live")),
+    ("AE", ("uae student", "dubai universit")),
+]
+_LIVE_TZ = (
+    "live class", "live classes", "live lecture", "live session",
+    "timezone", "time zone", "pm est", "pm pst", "pm gmt", "pm ist",
+)
+
+
+def _named_markets(blob: str) -> list[str]:
+    found: list[str] = []
+    for iso, cues in _MARKET_CUES:
+        if any(c in blob for c in cues):
+            found.append(iso)
+    return found
+
+
+def detect_onboarding(m: Merchant) -> list[Signal]:
+    """Signals from Dodo's real signup + add-product packet.
+
+    Only fires when the merchant carries a signup_category — that is the
+    public form packet, not the synthetic corpus's internal taxonomy.
+    """
+    out: list[Signal] = []
+    signup = getattr(m, "signup_category", None)
+    if not signup:
+        return out
+    tier, mapped = config.map_signup_category(signup)
+    if tier == "prohibited":
+        out.append(Signal(
+            id=f"policy:{mapped}", posture="deceiving", category=mapped,
+            title="Signup category is on the Merchant Acceptance prohibited list",
+            detail=("Dodo's own form already labels this unsupported: physical goods, "
+                    "manual services, gaming, marketplaces, and financial products "
+                    "cannot be onboarded. The engine does not soften that into a maybe."),
+            lr=28.0,
+            evidence=[f"signup category: {signup}", f"policy: {mapped}"],
+        ))
+    elif tier == "restricted":
+        out.append(Signal(
+            id=f"policy:{mapped}", posture="deceiving", category=mapped,
+            title="Category needs enhanced review under the acceptance policy",
+            detail="Not an auto-decline, but not an auto-approve either.",
+            lr=3.2,
+            evidence=[f"signup category: {signup}"],
+        ))
+
+    geo = config.country_eligibility(m.country)
+    if geo == "restricted":
+        out.append(Signal(
+            id="geo:restricted", posture="deceiving", category="undisclosed_illegality",
+            title=f"Merchant country {m.country} is not on the accepted countries list",
+            detail=("Eligibility is the country that issued the government ID, not tax "
+                    "residence. If it is not on the accepted list, we cannot onboard."),
+            lr=22.0,
+            evidence=[f"country: {m.country}"],
+        ))
+    elif geo == "grandfathered":
+        out.append(Signal(
+            id="geo:grandfathered", posture="deceiving", category="undisclosed_illegality",
+            title=f"{m.country} is grandfathered — new onboarding is not accepted",
+            detail="Existing accounts may continue under monitoring; new merchants here are blocked.",
+            lr=12.0,
+            evidence=[f"country: {m.country}"],
+        ))
+
+    blob = f"{m.pitch} {m.offering_claimed} {m.name}".lower()
+    signup_tier, _ = config.map_signup_category(signup)
+    if signup_tier == "accepted":
+        if any(w in blob for w in _SERVICE_COPY):
+            out.append(Signal(
+                id="mismatch:services", posture="deceiving",
+                category="manual_digital_services",
+                title="Copy describes a manual service while the category is digital",
+                detail="Misclassifying services as SaaS is a listed policy-breach pattern.",
+                lr=14.0, evidence=["matched service language in description"],
+            ))
+        if any(w in blob for w in _PHYSICAL_COPY):
+            out.append(Signal(
+                id="mismatch:physical", posture="deceiving", category="physical_goods",
+                title="Copy describes physical goods on a digital category",
+                lr=18.0, evidence=["matched physical-goods language"],
+            ))
+        if any(w in blob for w in _GAMING_COPY):
+            out.append(Signal(
+                id="mismatch:gaming", posture="deceiving",
+                category="gaming_virtual_goods",
+                title="Copy describes gaming / virtual goods on a digital category",
+                lr=18.0, evidence=["matched gaming language"],
+            ))
+
+    if any(p in blob for p in _THIN_LAUNCH):
+        out.append(Signal(
+            id="thin:prelaunch", posture="deceiving", category="low_value_digital",
+            title="Product copy reads as pre-launch or waitlist",
+            detail="Placeholder and coming-soon offerings are unsupported: no immediate usable value.",
+            lr=9.5, evidence=["matched pre-launch language"],
+        ))
+
+    fulfil = set(m.fulfilment or []) | set(getattr(m, "entitlements", None) or [])
+    if _looks_like_education(m) and ("telegram" in fulfil or "discord" in fulfil):
+        out.append(Signal(
+            id="fulfil:chat_edtech", posture="deceiving", category="low_value_digital",
+            title="Education product delivers via Telegram or Discord",
+            detail=("Campus courses can use chat, but gated Telegram/Discord is also "
+                    "how undisclosed catalogues get fulfilled. Stacks with hours and graph."),
+            lr=3.4,
+            evidence=[f"channels: {', '.join(sorted(fulfil))}"],
+        ))
+
+    # Early patterns: visible on the signup packet, no volume required.
+    foreign = [iso for iso in _named_markets(blob) if iso != (m.country or "").upper()]
+    live = any(p in blob for p in _LIVE_TZ)
+    if foreign and (_looks_like_education(m) or live):
+        night = config.local_night_label(m.country)
+        out.append(Signal(
+            id="audience:tz", posture="deceiving", category="product_drift",
+            title="Copy sells into a market whose day is this merchant's night",
+            detail=("The ID-issuing country sets local night hours "
+                    f"({night}). The pitch names {', '.join(foreign)} students or "
+                    "live classes. That is the Nightwell pattern at signup: you do "
+                    "not need settled volume to see that the buyer is not a local campus."),
+            lr=6.5,
+            evidence=[f"merchant country {m.country} night is {night}",
+                      f"named market: {', '.join(foreign)}"],
+        ))
+
+    price = float(getattr(m, "price_usd", 0) or 0)
+    pricing = (getattr(m, "pricing_type", None) or "")
+    if (signup_tier == "accepted" and pricing == "one_time" and 0 < price < 5
+            and ("files" in fulfil or "telegram" in fulfil or "discord" in fulfil)):
+        out.append(Signal(
+            id="price:low_value", posture="deceiving", category="low_value_digital",
+            title=f"${price:g} one-time digital with chat or file drop",
+            detail=("Low-value digital packs are on the prohibited list. A sub-$5 "
+                    "one-time download delivered over Telegram or a zip is that "
+                    "pattern wearing an accepted category."),
+            lr=11.0,
+            evidence=[f"price ${price:g} {pricing}",
+                      f"channels: {', '.join(sorted(fulfil))}"],
+        ))
+
+    entity = (getattr(m, "entity_type", None) or "")
+    if entity == "individual" and _looks_like_education(m) and any(
+            w in blob for w in ("university", "universities", "campus", "school partnership")):
+        out.append(Signal(
+            id="entity:solo_institution", posture="deceiving",
+            category="merchant_identity_fraud",
+            title="Individual account claiming a university or campus partnership",
+            detail=("KYC starts as a person; the pitch claims an institution. "
+                    "That gap is visible on the form, before any lecture is sold."),
+            lr=4.8,
+            evidence=[f"entity_type={entity}", "institutional language in copy"],
+        ))
+
+    chat_only = fulfil & {"telegram", "discord"}
+    software = fulfil & {"github", "license"}
+    if (mapped == "saas" and chat_only and not software
+            and not _looks_like_education(m)):
+        out.append(Signal(
+            id="fulfil:chat_saas", posture="deceiving", category="productized_services",
+            title="SaaS category, fulfilment only via Telegram or Discord",
+            detail=("Software usually ships a licence, GitHub seat, or file. "
+                    "Chat-only delivery on a SaaS tick is a community or service "
+                    "wearing a software label — catchable at Add product."),
+            lr=4.2,
+            evidence=[f"channels: {', '.join(sorted(fulfil))}"],
+        ))
+    return out
+
+
 def detect_copy(m: Merchant) -> list[Signal]:
     """Risk language in the name or purpose — works even when the web is down."""
     from .websearch import match_themes
@@ -396,6 +618,7 @@ def detect_all(m: Merchant, graph: ContextGraph, by_id: dict[str, Merchant],
             + detect_drifting(m, graph, by_id)
             + detect_failing(m, graph, by_id, portfolio_volume)
             + detect_attacked(m, graph, by_id)
+            + detect_onboarding(m)
             + detect_copy(m)
             + detect_web(m)
             + detect_memory(m, store))

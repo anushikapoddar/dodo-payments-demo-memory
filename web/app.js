@@ -33,25 +33,24 @@ const usd = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M`
   : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
 const money = (n) => `$${Math.round(n).toLocaleString()}`;
 
-/** Pin on a zoned track: approve-safe left of the decline line, not a fill from 0. */
-function pBadMeter(p, threshold, tone) {
-  const hi = Math.min(1, Math.max(threshold * 2.2, p * 1.2, 0.30));
-  const pPos = Math.min(97, Math.max(2.5, (p / hi) * 100));
-  const tPos = Math.min(92, Math.max(10, (threshold / hi) * 100));
+/** Probability meter: one number on a 0–100% track. The recommendation already
+    encodes the operating point; the bar does not restate a decline line. */
+function pBadMeter(p, _threshold, tone) {
+  const pPos = Math.min(96, Math.max(3, p * 100));
   const pin = tone === 'ok' ? 'ok' : (tone === 'warn' || tone === 'high') ? 'warn' : 'bad';
-  const pinSide = pPos < 16 ? 'left' : pPos > 84 ? 'right' : 'mid';
+  const pinSide = pPos < 16 ? 'left' : pPos > 78 ? 'right' : 'mid';
   return `<div class="pbar" role="img"
-    aria-label="Estimated P(bad) ${pct(p)} against a ${pct(threshold)} decline line">
-    <div class="pbar-you ${pinSide}" style="left:${pPos.toFixed(1)}%">${pct(p)}</div>
+    aria-label="${pct(p)} probability of going bad">
     <div class="pbar-track">
-      <i class="zone-ok" style="width:${tPos.toFixed(1)}%"></i>
-      <b class="mark" style="left:${tPos.toFixed(1)}%"></b>
+      <i class="pbar-fill ${pin}" style="width:${pPos.toFixed(1)}%"></i>
       <b class="pin ${pin}" style="left:${pPos.toFixed(1)}%"></b>
+    </div>
+    <div class="pbar-you-row">
+      <span class="pbar-you ${pinSide}" style="left:${pPos.toFixed(1)}%">${pct(p)}</span>
     </div>
     <div class="pbar-scale">
       <span>0%</span>
-      <span class="at" style="left:${tPos.toFixed(1)}%">${pct(threshold)}</span>
-      <span>${pct(hi, 0)}</span>
+      <span>100%</span>
     </div>
   </div>`;
 }
@@ -87,6 +86,22 @@ function recCosts(d) {
   </div>`;
 }
 
+function recWhy(b, d) {
+  const points = b.why || [];
+  const hasMath = (d.contributions && d.contributions.length) || d.p_bad != null;
+  if (!points.length && !b.explanation && !hasMath) return '';
+  return `<div class="rec-why">
+    <h3>Why this recommendation?</h3>
+    ${points.length ? `<ul class="rec-points">${points.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+    ${b.explanation ? `<p>${esc(b.explanation).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>` : ''}
+    <details class="rec-math">
+      <summary>The calculation</summary>
+      ${recChain(d)}
+      ${recCosts(d)}
+    </details>
+  </div>`;
+}
+
 function webCard(web) {
   if (!web) return '';
   const st = web.status || 'skipped';
@@ -118,6 +133,12 @@ const LABEL = {
   ebooks_publications: 'Ebooks & publications', templates_plugins_apps: 'Templates & plugins',
   marketing_outreach: 'Marketing outreach', ai_content_generation: 'AI content generation',
   productized_services: 'Productized services',
+  saas_ai_digital: 'SaaS / AI / Digital', edtech: 'Edtech', services: 'Services',
+  financial_services: 'Financial services', physical_products: 'Physical products',
+  gaming: 'Gaming', marketplace: 'Marketplace', others: 'Others',
+  manual_digital_services: 'Manual digital services',
+  unlicensed_financial: 'Financial products', physical_goods: 'Physical goods',
+  gaming_virtual_goods: 'Gaming / virtual goods', marketplace_resale: 'Marketplace',
 };
 const title = (s) => LABEL[s]
   || String(s || '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -161,6 +182,7 @@ const state = {
   view: 'homepage', portfolio: null, briefId: null,
   dir: { q: '', band: '', page: 0 },
   assessResult: null, assessFrom: null,
+  assessMode: 'import', assessDraft: null, applications: null,
 };
 
 function renderNav() {
@@ -879,53 +901,168 @@ const REC_LABEL = {
 };
 
 const ASSESS_CATS = [
-  ['saas', 'SaaS'], ['ai_product', 'AI product'], ['digital_goods', 'Digital goods'],
-  ['templates_plugins_apps', 'Templates & plugins'],
-  ['ebooks_publications', 'Ebooks & publications'],
-  ['marketing_outreach', 'Marketing outreach'],
-  ['ai_content_generation', 'AI content generation'],
+  ['saas_ai_digital', 'SaaS / AI or Digital products'],
+  ['edtech', 'Edtech'],
+  ['services', 'Services'],
+  ['financial_services', 'Financial services'],
+  ['physical_products', 'Physical products'],
+  ['gaming', 'Gaming'],
+  ['marketplace', 'Marketplace'],
+  ['others', 'Others'],
 ];
-const ASSESS_COUNTRIES = ['US', 'IN', 'GB', 'DE', 'SG', 'AE', 'BR', 'NL', 'PL', 'CA', 'AU', 'NG', 'EE'];
-const ASSESS_EXAMPLES = [
-  { name: 'Lumen Labs', note: 'linked to a terminated merchant' },
-  { name: 'Kindle Grove', note: 'catalogue / rights case' },
-  { name: 'Thistle Forge', note: 'clean applicant' },
+const ASSESS_TAX = [
+  ['saas', 'SaaS'], ['digital_products', 'Digital products'],
+  ['ebook', 'E-Book'], ['edtech', 'Edtech'],
 ];
+const ISO2 = (`AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ
+BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY
+CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM
+GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE
+KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML
+MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF
+PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN
+SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ
+VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW`).split(/\s+/);
+const regionNames = (typeof Intl !== 'undefined' && Intl.DisplayNames)
+  ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
+function flagEmoji(iso) {
+  const code = String(iso || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '';
+  return String.fromCodePoint(...[...code].map((c) => 127397 + c.charCodeAt(0)));
+}
+function countryName(iso) {
+  const code = String(iso || '').toUpperCase();
+  try { return (regionNames && regionNames.of(code)) || code; } catch { return code; }
+}
+function countryOptions(selected) {
+  return ISO2.map((iso) => ({ iso, name: countryName(iso) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(({ iso, name }) => {
+      const sel = iso === selected ? ' selected' : '';
+      return `<option value="${iso}"${sel}>${esc(flagEmoji(iso) + ' ' + name)}</option>`;
+    }).join('');
+}
+const ASSESS_REFERRAL = [
+  'Twitter/X', 'LinkedIn', 'Reddit', 'Google Search', 'ChatGPT',
+  'Perplexity', 'YouTube', 'Instagram', 'TikTok', 'RedNote', 'Referred by someone',
+];
+const ASSESS_ENTITLEMENTS = [
+  ['telegram', 'Telegram'], ['discord', 'Discord'], ['github', 'GitHub'],
+  ['license', 'License key'], ['files', 'Digital files'],
+  ['notion', 'Notion'], ['framer', 'Framer'],
+];
+const APP_STAGE = {
+  disclaimer: 'At disclaimer', signup: 'Signup',
+  product_form_pending: 'Product form in', kyc_pending: 'KYC pending',
+  on_platform: 'On platform',
+};
+const APP_KYC = {
+  not_started: 'KYC not started', pending: 'KYC pending', approved: 'KYC approved',
+};
+const req = '<span class="req" aria-hidden="true">*</span>';
 
-function viewAssess() {
+async function viewAssess() {
   if (state.assessResult) return viewAssessResult(state.assessResult);
+  if (!state.applications) {
+    try { state.applications = await api('/api/applications'); }
+    catch { state.applications = []; }
+  }
   return viewAssessForm();
 }
 
 function viewAssessForm() {
+  const mode = state.assessMode || 'import';
+  const draft = state.assessDraft;
+  const selectedCountry = (draft && draft.country) || '';
+  const seg = `<div class="seg" role="tablist" aria-label="How to load merchant data">
+      <button type="button" data-assess-mode="import" class="${mode === 'import' ? 'on' : ''}">Import from Dodo</button>
+      <button type="button" data-assess-mode="manual" class="${mode === 'manual' ? 'on' : ''}">Fill manually</button>
+    </div>
+    <p class="tiny muted" style="margin:-8px 0 16px">When a merchant signs up, adds a product, and starts KYC, that packet lands here.
+      Import it so you are not retyping what they already submitted. Manual fill is for cases that are not in Dodo yet.</p>`;
+
+  if (mode === 'import') {
+    const rows = state.applications || [];
+    const inbox = rows.length ? `<div class="inbox">${rows.map((a) => `
+        <div class="inbox-row">
+          <div class="flag" aria-hidden="true">${esc(flagEmoji(a.country))}</div>
+          <div class="nm">
+            <strong>${esc(a.name)}</strong>
+            <div class="tiny muted">${esc(countryName(a.country))} · ${esc(title(a.signup_category))}
+              · ${esc(APP_STAGE[a.stage] || a.stage)} · ${esc(APP_KYC[a.kyc] || a.kyc)}</div>
+            <div class="tiny muted">${esc(a.note || '')}</div>
+          </div>
+          <button type="button" class="btn small" data-import="${esc(a.id)}">Import</button>
+        </div>`).join('')}</div>`
+      : '<p class="empty">No inbound packets in this demo inbox.</p>';
+    return head('Assess a merchant',
+      'Pull the merchant’s Dodo packet, review it, then run the same engine.')
+      + `<div class="card assess-card"><h3>Inbound from Dodo<span class="hint">signup + product + KYC</span></h3>
+        ${seg}${inbox}
+        <p class="tiny muted">Demo inbox stands in for the live webhook. In production this is the same JSON the merchant already posted to Dodo.</p>
+      </div>`;
+  }
+
+  const banner = draft && draft.application_id ? `<div class="import-banner">
+      <div><strong>Imported from Dodo</strong>
+        <div class="tiny muted">${esc((draft._meta && draft._meta.source) || 'dodo.signup')}
+          · ${esc(APP_STAGE[(draft._meta && draft._meta.stage)] || '')}
+          · ${esc((draft._meta && draft._meta.note) || 'Merchant-submitted packet — edit before you run if something looks off.')}</div></div>
+      <button type="button" class="btn ghost small" data-assess-mode="import">Inbox</button>
+    </div>` : '';
+
   return head('Assess a merchant',
-    'Start a new assessment. The system runs the same deterministic engine used on the queue — it recommends; you decide. Evaluations holds the cases already waiting.')
-  + `<div class="card assess-card"><h3>Application</h3>
-      <p class="tiny muted" style="margin:-4px 0 14px">Name is enough to reassess someone already on file.
-        New merchants also need a purpose. We look the company up on the public web
-        (Wikipedia / DuckDuckGo) and run the same engine as the queue — it recommends; you decide.</p>
+    'Same packet Dodo collects at signup and Add product. Policy first, then web, graph, and memory. The system recommends; you decide.')
+  + `<div class="card assess-card">
+      ${seg}${banner}
+      <h3>Signup</h3>
+      <p class="tiny muted" style="margin:-4px 0 14px">Fields from the public registration form. Name is enough to reopen someone already on file.</p>
       <form id="assess-form">
         <div class="fields">
-          <div class="field span"><label for="aname">Merchant name</label>
+          <div class="field"><label for="afull">Full name ${req}</label>
+            <input id="afull" name="full_name" autocomplete="off" placeholder="Operator / founder"></div>
+          <div class="field"><label for="aname">Business name ${req}</label>
             <input id="aname" name="name" required autocomplete="off"
                    placeholder="e.g. Lumen Labs"></div>
-          <div class="field"><label for="acat">Category</label>
-            <select id="acat" name="category">${ASSESS_CATS.map(([v, l]) =>
+          <div class="field span"><label for="aurl">Website URL ${req}</label>
+            <input id="aurl" name="website" autocomplete="off" placeholder="https://"></div>
+          <div class="field"><label for="acat">Product category ${req}</label>
+            <select id="acat" name="signup_category">${ASSESS_CATS.map(([v, l]) =>
               `<option value="${v}">${esc(l)}</option>`).join('')}</select></div>
-          <div class="field"><label for="actry">Country</label>
-            <select id="actry" name="country">${ASSESS_COUNTRIES.map((c) =>
-              `<option value="${c}"${c === 'US' ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
-          <div class="field"><label for="avol">Monthly volume (USD)</label>
-            <input id="avol" name="volume" type="number" min="0" step="100" placeholder="0 if not live yet"></div>
-          <div class="field"><label for="alim">Requested exposure / limit (USD)</label>
-            <input id="alim" name="requested_limit" type="number" min="0" step="100" placeholder="optional"></div>
-          <div class="field span"><label for="apur">Purpose / product</label>
+          <div class="field"><label for="actry">Where are you located? ${req}</label>
+            <select id="actry" name="country"><option value="">Select...</option>
+              ${countryOptions(selectedCountry)}</select></div>
+          <div class="field"><label for="aentity">Individual or registered entity</label>
+            <select id="aentity" name="entity_type">
+              <option value="individual">Individual</option>
+              <option value="registered" selected>Registered entity</option>
+            </select></div>
+          <div class="field"><label for="aref">Where did you hear about us? ${req}</label>
+            <select id="aref" name="referral"><option value="">Select referral source</option>
+              ${ASSESS_REFERRAL.map((r) => `<option>${esc(r)}</option>`).join('')}</select></div>
+          <div class="field span"><label for="apur">How can we make monetization simpler for you?</label>
             <textarea id="apur" name="purpose" placeholder="What they sell, and how they charge."></textarea></div>
         </div>
-        <p class="tiny muted" style="margin:12px 0 8px">Try an existing applicant to see memory and graph context:</p>
-        <div class="chips">${ASSESS_EXAMPLES.map((ex) =>
-          `<button type="button" data-fill="${esc(ex.name)}">${esc(ex.name)}
-            <span class="muted"> · ${esc(ex.note)}</span></button>`).join('')}</div>
+        <h3 style="margin:22px 0 8px">Add product</h3>
+        <p class="tiny muted" style="margin:0 0 14px">Catalogue fields from the dashboard form. Tax category and fulfillment are how misclassification shows up.</p>
+        <div class="fields">
+          <div class="field"><label for="aprod">Product name ${req}</label>
+            <input id="aprod" name="product_name" placeholder="Eg: Framer Template"></div>
+          <div class="field"><label for="atax">Tax category ${req}</label>
+            <select id="atax" name="tax_category">${ASSESS_TAX.map(([v, l]) =>
+              `<option value="${v}">${esc(l)}</option>`).join('')}</select></div>
+          <div class="field"><label for="aptype">Pricing type</label>
+            <select id="aptype" name="pricing_type">
+              <option value="one_time">One time</option>
+              <option value="subscription">Subscription</option>
+              <option value="usage">Usage based</option>
+            </select></div>
+          <div class="field"><label for="aprice">Price (USD) ${req}</label>
+            <input id="aprice" name="price" type="number" min="0" step="0.01" placeholder="0"></div>
+          <div class="field span"><label>Entitlements — how access is delivered</label>
+            <div class="checks">${ASSESS_ENTITLEMENTS.map(([v, l]) =>
+              `<label><input type="checkbox" name="ent" value="${v}"> ${esc(l)}</label>`).join('')}</div></div>
+        </div>
         <div class="actions">
           <button class="btn-primary" id="arun" type="submit">${svg('shield')} Run Assessment</button>
         </div>
@@ -940,10 +1077,6 @@ function viewAssessResult(b) {
   const relatedEmpty = '<p class="tiny muted">No related entities found.</p>';
   const confirm = b.decisionRecorded;
   const decided = (m.status && m.status !== 'pending') || !!confirm;
-  const gap = d.threshold - d.p_bad;
-  const vsLine = gap >= 0
-    ? `${pct(d.p_bad)} chance of going bad — ${pct(gap)} below the decline line.`
-    : `${pct(d.p_bad)} chance of going bad — ${pct(-gap)} above the decline line.`;
   const toneChip = { ok: 'ok', warn: 'warn', high: 'high', bad: 'bad' }[b.risk_band_tone] || 'mute';
 
   return head(esc(m.name) + (m.real ? ' <span class="real">Dodo customer</span>' : ''),
@@ -963,29 +1096,12 @@ function viewAssessResult(b) {
               <div class="h">${esc(recText)}</div>
               <span class="chip c-${esc(toneChip)}">${esc(b.risk_band)}</span>
             </div>
-            <p class="rec-vs">${esc(vsLine)}</p>
-          </div>
-          <div class="rec-compare">
-            <div>
-              <b>${pct(d.p_bad)}</b>
-              <span>P(bad)</span>
-            </div>
-            <i>vs</i>
-            <div>
-              <b>${pct(d.threshold)}</b>
-              <span>Decline line</span>
-            </div>
+            <p class="rec-vs">${pct(d.p_bad)} probability of going bad</p>
           </div>
         </div>
         ${pBadMeter(d.p_bad, d.threshold, b.risk_band_tone)}
-        ${recChain(d)}
-        ${recCosts(d)}
         ${webCard(b.web)}
-        ${(b.why || []).length || b.explanation ? `<div class="rec-why">
-          <h3>Why this recommendation?</h3>
-          ${(b.why || []).length ? `<ul class="rec-points">${b.why.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
-          ${b.explanation ? `<p>${esc(b.explanation).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>` : ''}
-        </div>` : ''}
+        ${recWhy(b, d)}
       </div>
 
       <div class="card"><h3>Risk signals<span class="hint">${(b.signals || []).length} fired</span></h3>
@@ -1086,6 +1202,31 @@ const ASSESS_STEPS = [
   'Building assessment',
 ];
 
+function fillAssessForm(p) {
+  if (!p || !$('#assess-form')) return;
+  const set = (id, v) => {
+    const el = $(id);
+    if (!el || v == null || v === '') return;
+    el.value = v;
+  };
+  set('#afull', p.full_name);
+  set('#aname', p.name);
+  set('#aurl', p.website);
+  set('#acat', p.signup_category || p.category);
+  set('#actry', p.country);
+  set('#aentity', p.entity_type);
+  set('#aref', p.referral);
+  set('#apur', p.purpose);
+  set('#aprod', p.product_name);
+  set('#atax', p.tax_category);
+  set('#aptype', p.pricing_type);
+  if (p.price != null && p.price !== '') set('#aprice', p.price);
+  (p.entitlements || []).forEach((v) => {
+    const el = document.querySelector(`input[name="ent"][value="${v}"]`);
+    if (el) el.checked = true;
+  });
+}
+
 function showAssessError(msg) {
   const el = $('#aerr');
   if (!el) { toast(msg); return; }
@@ -1105,6 +1246,8 @@ function wireAssess() {
   if (anew) anew.onclick = () => {
     state.assessResult = null;
     state.assessFrom = null;
+    state.assessDraft = null;
+    state.assessMode = 'import';
     go('assess');
   };
   const toHistory = $('#assess-to-history');
@@ -1115,17 +1258,34 @@ function wireAssess() {
     render();
   };
 
-  document.querySelectorAll('[data-fill]').forEach((b) => {
+  document.querySelectorAll('[data-assess-mode]').forEach((b) => {
     b.onclick = () => {
-      const name = b.dataset.fill;
-      const input = $('#aname');
-      if (input) input.value = name;
-      const purpose = $('#apur');
-      if (purpose && !purpose.value.trim()) {
-        purpose.placeholder = 'Existing merchant — purpose is optional';
+      const next = b.dataset.assessMode;
+      state.assessMode = next;
+      if (next === 'import') state.assessDraft = null;
+      render();
+    };
+  });
+  document.querySelectorAll('[data-import]').forEach((b) => {
+    b.onclick = async () => {
+      const id = b.dataset.import;
+      b.disabled = true;
+      try {
+        const row = await api('/api/applications/' + encodeURIComponent(id));
+        const packet = Object.assign({}, row.packet || {}, {
+          application_id: row.id,
+          _meta: row,
+        });
+        state.assessDraft = packet;
+        state.assessMode = 'manual';
+        render();
+      } catch (e) {
+        b.disabled = false;
+        toast('Could not import packet: ' + e.message);
       }
     };
   });
+  fillAssessForm(state.assessDraft);
 
   document.querySelectorAll('[data-assess-act]').forEach((b) => {
     b.onclick = async () => {
@@ -1166,18 +1326,37 @@ function wireAssess() {
   if (!form) return;
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const name = ($('#aname') || {}).value.trim();
+    const val = (id) => String(($(id) || {}).value || '').trim();
+    const name = val('#aname');
     if (!name) { showAssessError('Merchant name is required.'); return; }
-    const purpose = ($('#apur') || {}).value.trim();
-    const volume = ($('#avol') || {}).value;
-    const limit = ($('#alim') || {}).value;
-    const category = ($('#acat') || {}).value;
-    const country = ($('#actry') || {}).value;
-    const known = ASSESS_EXAMPLES.some((ex) => ex.name.toLowerCase() === name.toLowerCase());
-    if (!purpose && !known) {
-      showAssessError('Purpose is required for a new merchant so memory has something to match.');
+    const purpose = val('#apur');
+    const category = val('#acat');
+    const country = val('#actry');
+    const applicationId = (state.assessDraft && state.assessDraft.application_id) || '';
+    if (!purpose && !applicationId) {
+      showAssessError('A product description is required for a new merchant.');
       return;
     }
+    if (!country && !applicationId) {
+      showAssessError('Country is required.');
+      return;
+    }
+    const payload = {
+      name, category, signup_category: category, country,
+      purpose,
+      website: val('#aurl'),
+      full_name: val('#afull'),
+      entity_type: val('#aentity'),
+      referral: val('#aref'),
+      product_name: val('#aprod'),
+      tax_category: val('#atax'),
+      pricing_type: val('#aptype'),
+      price: val('#aprice') ? Number(val('#aprice')) : 0,
+      entitlements: [...document.querySelectorAll('input[name="ent"]:checked')].map((el) => el.value),
+      application_id: applicationId || undefined,
+      explain: true,
+      web: true,
+    };
     const run = $('#arun');
     if (run) { run.disabled = true; run.innerHTML = '<span class="spinner"></span>Assessing…'; }
     const err = $('#aerr'); if (err) err.hidden = true;
@@ -1194,14 +1373,7 @@ function wireAssess() {
       card.querySelectorAll('.steps li').forEach((li, i) => li.classList.toggle('on', i === step));
     }, 450);
     try {
-      const r = await post('/api/assess', {
-        name, category, country,
-        volume: volume ? Number(volume) : 0,
-        requested_limit: limit ? Number(limit) : 0,
-        purpose,
-        explain: true,
-        web: true,
-      });
+      const r = await post('/api/assess', payload);
       clearInterval(timer);
       if (r.error) throw new Error(r.error);
       if (!r.decision || !r.merchant) throw new Error('Malformed assessment response.');
@@ -1305,7 +1477,13 @@ function wire() {
   if (band) band.onchange = () => { state.dir.band = band.value; state.dir.page = 0; render(); };
 
   const nw = $('#newapp');
-  if (nw) nw.onclick = () => { state.assessResult = null; state.assessFrom = null; go('assess'); };
+  if (nw) nw.onclick = () => {
+    state.assessResult = null;
+    state.assessFrom = null;
+    state.assessDraft = null;
+    state.assessMode = 'import';
+    go('assess');
+  };
 
   const back = $('#back');
   if (back) back.onclick = () => go(state.view);

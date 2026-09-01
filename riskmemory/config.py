@@ -110,6 +110,116 @@ POLICY_PROHIBITED = {
     "religious_guidance", "donations_no_deliverable", "marketplace_resale",
 }
 
+#: Signup dropdown on app.dodopayments.com — coarser than the policy taxonomy.
+#: Maps to (tier, internal category). Prohibited here is a hard do-not-onboard.
+SIGNUP_CATEGORY = {
+    "saas_ai_digital": ("accepted", "saas"),
+    "edtech": ("accepted", "ebooks_publications"),
+    "services": ("prohibited", "manual_digital_services"),
+    "financial_services": ("prohibited", "unlicensed_financial"),
+    "physical_products": ("prohibited", "physical_goods"),
+    "gaming": ("prohibited", "gaming_virtual_goods"),
+    "marketplace": ("prohibited", "marketplace_resale"),
+    "others": ("restricted", "productized_services"),
+}
+
+#: Add-product tax category on the Dodo catalogue form.
+TAX_CATEGORY = {
+    "digital_products": "digital_goods",
+    "saas": "saas",
+    "ebook": "ebooks_publications",
+    "edtech": "ebooks_publications",
+}
+
+#: ISO-2 of countries eligible to onboard (ID-issuing country), from
+#: docs.dodopayments.com/miscellaneous/accepted-countries-and-territories
+#: as of 1 Sep 2026. Anything else is a geo block.
+ACCEPTED_COUNTRY_ISO = frozenset("""
+AL AD AI AG AR AM AW AU AT AZ BS BH BB BE BZ BJ BM BT BO BA BW BR VG BN BG BF
+CV KH CA KY CL CN CO KM CK CR HR CW CY CZ DK DJ DM DO EC SV EE SZ ET FK FO FJ
+FI FR PF GA GM GE DE GH GI GR GL GD GU GT GG GN GW GY HN HK HU IS IN ID IE IM
+IL IT JM JP JE JO KZ KI KG LV LS LR LI LT LU MG MW MY MV ML MT MR MU MX MD MC
+MN ME MS MZ NA NP NL NC NZ NE MK NO OM PW PA PY PE PH PL PT PR QA KR RO RW KN
+LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SI SB ZA ES LK SR SE CH TW TJ TZ
+TH TL TG TO TT TN TR TM TC UG AE GB US UY UZ VU VN VI WF ZM ZW
+""".split())
+
+#: Supported before 23 Mar 2026; new onboarding is not. Enhanced monitoring.
+GRANDFATHERED_COUNTRY_ISO = frozenset(
+    "BD EG GQ ER MH FM MA NR NG TV UA".split())
+
+
+def map_signup_category(raw: str) -> tuple[str, str]:
+    """Return (tier, internal_category) for a signup or legacy category id."""
+    cat = (raw or "").strip()
+    if cat in SIGNUP_CATEGORY:
+        return SIGNUP_CATEGORY[cat]
+    if cat in POLICY_PROHIBITED:
+        return "prohibited", cat
+    if cat in POLICY_RESTRICTED:
+        return "restricted", cat
+    if cat in POLICY_ACCEPTED:
+        return "accepted", cat
+    if cat in TAX_CATEGORY:
+        mapped = TAX_CATEGORY[cat]
+        return map_signup_category(mapped)
+    return "restricted", "saas"
+
+
+def country_eligibility(iso: str) -> str:
+    code = (iso or "").strip().upper()
+    if code in ACCEPTED_COUNTRY_ISO:
+        return "accepted"
+    if code in GRANDFATHERED_COUNTRY_ISO:
+        return "grandfathered"
+    return "restricted"
+
+
+#: Representative IANA timezone for the ID-issuing country. Night hours are
+#: always local to this zone — never UTC. The US is collapsed to Eastern as a
+#: demo stand-in; a live system would use the merchant's stated operating tz.
+COUNTRY_TZ = {
+    "US": ("America/New_York", "ET"),
+    "CA": ("America/Toronto", "ET"),
+    "GB": ("Europe/London", "UK"),
+    "IE": ("Europe/Dublin", "IST-IE"),
+    "IN": ("Asia/Kolkata", "IST"),
+    "PK": ("Asia/Karachi", "PKT"),
+    "AE": ("Asia/Dubai", "GST"),
+    "SG": ("Asia/Singapore", "SGT"),
+    "JP": ("Asia/Tokyo", "JST"),
+    "KR": ("Asia/Seoul", "KST"),
+    "AU": ("Australia/Sydney", "AEST"),
+    "NZ": ("Pacific/Auckland", "NZST"),
+    "DE": ("Europe/Berlin", "CET"),
+    "FR": ("Europe/Paris", "CET"),
+    "NL": ("Europe/Amsterdam", "CET"),
+    "PL": ("Europe/Warsaw", "CET"),
+    "EE": ("Europe/Tallinn", "EET"),
+    "BR": ("America/Sao_Paulo", "BRT"),
+    "ZA": ("Africa/Johannesburg", "SAST"),
+    "NG": ("Africa/Lagos", "WAT"),
+    "RU": ("Europe/Moscow", "MSK"),
+    "IR": ("Asia/Tehran", "IRST"),
+}
+
+#: Local clock window treated as "night" for hours_mismatch. Same clock times,
+#: different UTC instants, once the country timezone is applied.
+NIGHT_START_HOUR = 22
+NIGHT_END_HOUR = 6
+
+
+def local_night_window(iso: str) -> tuple[str, str, int, int]:
+    """Return (iana_tz, abbreviation, start_hour, end_hour) for a country."""
+    code = (iso or "").strip().upper()
+    tz, abbr = COUNTRY_TZ.get(code, (f"local/{code or '??'}", code or "local"))
+    return tz, abbr, NIGHT_START_HOUR, NIGHT_END_HOUR
+
+
+def local_night_label(iso: str) -> str:
+    tz, abbr, start, end = local_night_window(iso)
+    return f"{start:02d}:00–{end:02d}:00 {abbr} ({tz})"
+
 # -- Dodo Payments platform facts (dodopayments.com, 20 Aug 2026) ----------
 PLATFORM_NAME = "Dodo Payments"
 PLATFORM_TAGLINE = "Billing and payments for AI-first companies"

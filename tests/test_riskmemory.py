@@ -691,6 +691,132 @@ class TestAssessDifferentiation(unittest.TestCase):
         self.assertAlmostEqual(
             saas["decision"]["p_bad"], config.CONFIRMED_BAD_RATE, delta=0.03)
 
+    def test_services_signup_is_a_hard_decline(self):
+        app = App()
+        out = app.assess({
+            "name": "Quill Harbor Freelance Co",
+            "signup_category": "services",
+            "country": "US",
+            "purpose": "Custom design and freelance coaching for founders",
+            "web": False,
+        })
+        self.assertEqual(out["decision"]["recommendation"], "decline")
+        self.assertTrue(any(s["id"].startswith("policy:") for s in out["signals"]))
+
+    def test_restricted_country_blocks_onboarding(self):
+        app = App()
+        out = app.assess({
+            "name": "Cedar PK Ledger Co",
+            "signup_category": "saas_ai_digital",
+            "country": "PK",
+            "purpose": "Inventory software for independent furniture retailers",
+            "web": False,
+        })
+        self.assertIn(out["decision"]["recommendation"], ("decline", "escalate"))
+        self.assertTrue(any(s["id"] == "geo:restricted" for s in out["signals"]))
+
+    def test_nightwell_hours_mismatch_fires(self):
+        app = App()
+        out = app.assess({"merchant_id": "m90020", "web": False})
+        ids = [s["id"] for s in out["signals"]]
+        self.assertIn("hours_mismatch", ids)
+        self.assertGreater(out["decision"]["p_bad"], 0.10)
+        hours = next(s for s in out["signals"] if s["id"] == "hours_mismatch")
+        blob = hours["title"] + " " + hours["detail"] + " " + " ".join(hours["evidence"])
+        self.assertIn("IST", blob)
+        self.assertIn("Asia/Kolkata", blob)
+        self.assertIn("not UTC", hours["detail"])
+
+    def test_night_window_is_country_local_not_utc(self):
+        in_lbl = config.local_night_label("IN")
+        us_lbl = config.local_night_label("US")
+        self.assertIn("IST", in_lbl)
+        self.assertIn("ET", us_lbl)
+        self.assertNotEqual(in_lbl, us_lbl)
+        self.assertIn("22:00", in_lbl)
+        self.assertIn("22:00", us_lbl)
+
+    def test_accepted_category_with_service_copy_is_a_mismatch(self):
+        app = App()
+        out = app.assess({
+            "name": "Northline Consulting Pack",
+            "signup_category": "saas_ai_digital",
+            "country": "US",
+            "purpose": "Done for you consulting and freelance coaching packaged as a dashboard",
+            "web": False,
+        })
+        self.assertTrue(any(s["id"] == "mismatch:services" for s in out["signals"]))
+        self.assertGreater(out["decision"]["p_bad"], config.CONFIRMED_BAD_RATE + 0.05)
+
+    def test_legacy_saas_category_still_maps(self):
+        app = App()
+        out = app.assess({
+            "name": "Zed Pipeline",
+            "category": "saas",
+            "purpose": "Team analytics dashboard for small product teams",
+            "web": False,
+        })
+        self.assertEqual(app.by_id[out["merchant_id"]].category_claimed, "saas")
+
+
+class TestInboundApplications(unittest.TestCase):
+    """Merchant-submitted Dodo packets can be imported instead of retyped."""
+
+    def test_inbox_lists_seeded_packets(self):
+        from riskmemory.applications import list_applications
+        ids = {row["id"] for row in list_applications()}
+        self.assertTrue({"app_lumen", "app_services", "app_geo", "app_nightwell"} <= ids)
+
+    def test_unknown_application_id_errors(self):
+        out = App().assess({"application_id": "app_missing", "web": False})
+        self.assertEqual(out.get("error"), "unknown application")
+
+    def test_import_alone_is_enough_to_assess(self):
+        app = App()
+        out = app.assess({"application_id": "app_services", "web": False})
+        self.assertNotIn("error", out)
+        self.assertEqual(out["merchant"]["name"], "Quill Harbor Freelance Co")
+        self.assertEqual(out["decision"]["recommendation"], "decline")
+        self.assertTrue(any(s["id"].startswith("policy:") for s in out["signals"]))
+
+    def test_imported_restricted_country_still_blocks(self):
+        out = App().assess({"application_id": "app_geo", "web": False})
+        self.assertTrue(any(s["id"] == "geo:restricted" for s in out["signals"]))
+
+    def test_form_overrides_win_over_the_packet(self):
+        out = App().assess({
+            "application_id": "app_geo",
+            "country": "US",
+            "web": False,
+        })
+        self.assertFalse(any(s["id"] == "geo:restricted" for s in out["signals"]))
+
+    def test_audience_timezone_mismatch_fires_at_signup(self):
+        """IN edtech selling live EST classes — Nightwell, before any volume."""
+        app = App()
+        out = app.assess({"application_id": "app_audience", "web": False})
+        ids = [s["id"] for s in out["signals"]]
+        self.assertIn("audience:tz", ids)
+        self.assertNotIn("hours_mismatch", ids)
+        self.assertGreater(out["decision"]["p_bad"], config.CONFIRMED_BAD_RATE + 0.05)
+        m = app.by_id[out["merchant_id"]]
+        self.assertEqual(m.settled_txns, 0)
+
+    def test_low_value_digital_pack_is_flagged(self):
+        out = App().assess({"application_id": "app_lowvalue", "web": False})
+        self.assertTrue(any(s["id"] == "price:low_value" for s in out["signals"]))
+
+    def test_individual_claiming_university_is_flagged(self):
+        out = App().assess({"application_id": "app_solo_uni", "web": False})
+        self.assertTrue(any(s["id"] == "entity:solo_institution" for s in out["signals"]))
+
+    def test_stylesheet_is_dark(self):
+        css = (Path(__file__).parent.parent / "web" / "styles.css").read_text()
+        self.assertIn("color-scheme:dark", css.replace(" ", ""))
+        js = (Path(__file__).parent.parent / "web" / "app.js").read_text()
+        self.assertIn("flagEmoji", js)
+        self.assertIn("/api/applications", js)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

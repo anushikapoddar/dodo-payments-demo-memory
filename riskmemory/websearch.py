@@ -65,12 +65,13 @@ def skipped(reason: str = "disabled") -> dict:
     return {"status": "skipped", "reason": reason, "query": "", "hits": [], "themes": []}
 
 
-def lookup(name: str, country: str = "", purpose: str = "") -> dict:
+def lookup(name: str, country: str = "", purpose: str = "",
+           website: str = "") -> dict:
     """Fetch public pages about this company. Never raises."""
     name = (name or "").strip()
     if not name:
         return skipped("no name")
-    query = " ".join(p for p in (name, "company", country) if p)
+    query = " ".join(p for p in (name, website or "", "company", country) if p)
     hits: list[dict] = []
     errors: list[str] = []
     for fn in (_wikipedia, _duckduckgo):
@@ -92,7 +93,8 @@ def lookup(name: str, country: str = "", purpose: str = "") -> dict:
         if len(uniq) == 6:
             break
     blob = " ".join(
-        [name, purpose or ""] + [f"{h.get('title','')} {h.get('snippet','')}" for h in uniq]
+        [name, purpose or "", website or ""]
+        + [f"{h.get('title','')} {h.get('snippet','')}" for h in uniq]
     )
     themes = match_themes(blob)
     status = "found" if uniq else ("error" if errors else "empty")

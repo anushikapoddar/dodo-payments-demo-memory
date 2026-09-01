@@ -218,16 +218,16 @@ class App:
             matches.sort(key=lambda m: (0 if m.status == "pending" else 1, m.id))
             return matches[0], False, None
 
-        pitch = str(payload.get("purpose") or payload.get("pitch") or "").strip()
+        pitch = str(payload.get("purpose") or payload.get("pitch")
+                    or payload.get("product_description") or "").strip()
         if not pitch:
             return None, False, "purpose is required for a new merchant"
         return self._admit_applicant(payload, name, pitch), True, None
 
     def _admit_applicant(self, payload: dict, name: str, pitch: str) -> Merchant:
-        allowed = config.POLICY_ACCEPTED | config.POLICY_RESTRICTED | config.POLICY_PROHIBITED
-        category = str(payload.get("category") or "saas").strip()
-        if category not in allowed:
-            category = "saas"
+        signup_raw = str(payload.get("signup_category")
+                         or payload.get("category") or "saas_ai_digital").strip()
+        tier, category = config.map_signup_category(signup_raw)
         raw_country = str(payload.get("country") or "US").strip().upper()
         country = raw_country if len(raw_country) == 2 and raw_country.isalpha() else "US"
 
@@ -238,29 +238,91 @@ class App:
                 return default
 
         forecast = _num("requested_limit") or _num("volume") or _num("forecast_monthly")
+        website = str(payload.get("website") or payload.get("url") or "").strip()
+        domain = self._domain_from_website(website, name)
         slug = "".join(ch for ch in name.lower() if ch.isalnum())[:18] or "applicant"
         nid = "ma" + _hash("assess-admit", name.lower(), category, country)
         if nid in self.by_id:
             return self.by_id[nid]
 
+        entitlements = payload.get("entitlements") or []
+        if isinstance(entitlements, str):
+            entitlements = [e.strip() for e in entitlements.split(",") if e.strip()]
+        fulfil = list(dict.fromkeys(
+            (["email"] + [e for e in entitlements if e in
+              ("telegram", "discord", "github", "email", "files")])))
+        tax = str(payload.get("tax_category") or "").strip() or None
+        if tax and tax in config.TAX_CATEGORY:
+            # keep signup mapping, but record the catalogue tax category
+            pass
+
         m = Merchant(
-            id=nid, name=name, domain=f"{slug}.app", country=country,
-            founder=f"{name} operator", founder_email=f"ops@{slug}.app",
+            id=nid, name=name, domain=domain, country=country,
+            founder=str(payload.get("full_name") or f"{name} operator").strip(),
+            founder_email=f"ops@{slug}.app",
             category_claimed=category, pitch=pitch,
-            offering_claimed=pitch[:80],
+            offering_claimed=(str(payload.get("product_name") or "") or pitch)[:80],
             applied_at=config.DEMO_TODAY, domain_age_days=30,
             registrar="Cloudflare", nameserver="ns.cloudflare",
             site_template=f"tpl-assess-{slug}",
             terms_hash=_hash("terms", nid),
             payout_iban=f"{country} •••• {abs(hash(nid)) % 9000 + 1000}",
             payout_branch="Assess / New-01", payout_holder=name.upper(),
-            fulfilment=["email"], status="pending",
+            fulfilment=fulfil or ["email"], status="pending",
             forecast_monthly=forecast,
+            website=website or f"https://{domain}",
+            entity_type=str(payload.get("entity_type") or "").strip() or None,
+            referral=str(payload.get("referral") or "").strip() or None,
+            signup_category=signup_raw if signup_raw in config.SIGNUP_CATEGORY else signup_raw,
+            tax_category=tax,
+            pricing_type=str(payload.get("pricing_type") or "").strip() or None,
+            price_usd=_num("price"),
+            entitlements=list(entitlements),
         )
+        _ = tier  # used by detect_onboarding via signup_category
         self.merchants.append(m)
         self.by_id[m.id] = m
         self.graph.ingest(m)
         return m
+
+    @staticmethod
+    def _domain_from_website(url: str, name: str) -> str:
+        from urllib.parse import urlparse
+        slug = "".join(ch for ch in name.lower() if ch.isalnum())[:18] or "applicant"
+        fallback = f"{slug}.app"
+        raw = (url or "").strip()
+        if not raw:
+            return fallback
+        if "://" not in raw:
+            raw = "https://" + raw
+        host = urlparse(raw).hostname or ""
+        host = host.lower().removeprefix("www.")
+        return host or fallback
+
+    @staticmethod
+    def _merge_application(payload: dict) -> dict:
+        """Fill blanks from a Dodo signup packet so the analyst does not retype.
+
+        Form fields win when they are non-empty. ``application_id`` alone is
+        enough to assess a seeded inbound packet.
+        """
+        from .applications import packet_for_assess
+        out = dict(payload)
+        app_id = str(out.get("application_id") or "").strip()
+        if not app_id:
+            return out
+        packet = packet_for_assess(app_id)
+        if not packet:
+            return {"error": "unknown application"}
+        merged = dict(packet)
+        for key, value in out.items():
+            if key in ("explain", "web", "application_id"):
+                merged[key] = value
+                continue
+            if value in (None, "", [], {}):
+                continue
+            merged[key] = value
+        return merged
 
     def assess(self, payload: dict) -> dict:
         """Run the existing engine without recording a human decision.
@@ -269,14 +331,19 @@ class App:
         via ``brief``. Status, rationale and memory reconciliation are left
         to ``record_decision``.
         """
-        merchant, created, err = self._resolve_applicant(payload or {})
+        payload = self._merge_application(payload or {})
+        if payload.get("error"):
+            return payload
+
+        merchant, created, err = self._resolve_applicant(payload)
         if err:
             return {"error": err}
 
         from . import websearch
         if websearch.enabled(payload):
             report = websearch.lookup(
-                merchant.name, merchant.country, merchant.pitch)
+                merchant.name, merchant.country, merchant.pitch,
+                website=getattr(merchant, "website", "") or "")
         else:
             report = websearch.skipped("disabled")
         merchant.web_report = report
@@ -297,6 +364,14 @@ class App:
         }
         self._log_assessment(out)
         return out
+
+    def applications(self) -> list[dict]:
+        from .applications import list_applications
+        return list_applications()
+
+    def application(self, app_id: str) -> Optional[dict]:
+        from .applications import get_application
+        return get_application(app_id)
 
     def assessments(self) -> list[dict]:
         return [self._assessment_view(row) for row in self.assessment_log]

@@ -86,6 +86,20 @@ class Merchant:
     #: authored ``truth_bad`` so seed declines do not rewrite the prior.
     learned_bad: bool = False
 
+    # Dodo signup / add-product packet (optional on the synthetic corpus)
+    website: Optional[str] = None
+    entity_type: Optional[str] = None          # individual | registered
+    referral: Optional[str] = None
+    signup_category: Optional[str] = None      # dropdown on app.dodopayments.com
+    tax_category: Optional[str] = None         # Add product tax category
+    pricing_type: Optional[str] = None         # one_time | subscription | usage
+    price_usd: float = 0.0
+    entitlements: list[str] = field(default_factory=list)
+    #: Share of settled volume in the merchant country's *local* night window
+    #: (see config.local_night_label). Never UTC — 22:00 IST is not 22:00 ET.
+    #: Post-approval: you cannot see this at signup, only after volume lands.
+    night_txn_share: float = 0.0
+
     def vamp_ratio(self) -> float:
         if self.settled_txns <= 0:
             return 0.0
@@ -525,6 +539,35 @@ def _scenarios() -> list[Merchant]:
         payout_iban="NL •••• 7712", payout_branch="Verity / Amsterdam-05",
         payout_holder="MARLOW TYPE BV", fulfilment=["email"],
         status="pending", scenario="clean_b",
+    ))
+
+    # ---- Hours mismatch: claimed university courses, night-heavy volume --
+    out.append(Merchant(
+        id="m90020", forecast_monthly=16000, name="Nightwell Academy",
+        domain="nightwell.academy", country="IN",
+        founder="P. Sharma", founder_email="priya@nightwell.academy",
+        category_claimed="ebooks_publications",
+        pitch="Exam prep and recorded lectures in partnership with universities. "
+              "Sold to students through campus tie-ups.",
+        offering_claimed="university exam prep courses",
+        applied_at=_d(95), domain_age_days=210, registrar="GoDaddy",
+        nameserver="ns.godaddy", site_template="tpl-next-landing",
+        terms_hash=_hash("terms", "nightwell"),
+        payout_iban="IN •••• 6621", payout_branch="Ardent / Dublin-07",
+        payout_holder="NIGHTWELL ACADEMY LLP",
+        fulfilment=["telegram", "email"],
+        status="approved", decided_at=_d(93), decided_by="analyst.dan",
+        rationale="Approved: edtech, campus partnerships claimed.",
+        monthly_volume=19_400, settled_txns=2_860, disputes=22, fraud_reports=4,
+        refund_rate=0.06, offering_observed="university exam prep courses",
+        observed_category="ebooks_publications", last_observed_at=_d(1),
+        signup_category="edtech", tax_category="edtech",
+        pricing_type="one_time", price_usd=49.0, entitlements=["telegram", "files"],
+        website="https://nightwell.academy", entity_type="registered",
+        night_txn_share=0.78,
+        truth_bad=True, truth_category="undisclosed_illegality",
+        truth_note="Claimed university daytime sales; 78% of volume lands 22:00–06:00 IST.",
+        scenario="night_hours",
     ))
     return out
 
