@@ -73,6 +73,22 @@ In one sentence: we can notice the right things at signup, show our working,
 and get better when an analyst decides. We cannot yet say the percentage is
 Dodo's true probability.
 
+## Next steps
+
+Not a model to train. The next connection is Dodo's merchant records.
+
+1. **Signup integration.** Take what the merchant already submitted at signup,
+   add product, and KYC, so an analyst does not retype it.
+2. **Outcomes.** Who we approved, who we declined, and who later went bad.
+   That replaces the assumed 1.7% and the weights in `config.py`.
+3. **Live ops.** Disputes, prepaid balances, and payout changes for merchants
+   already on the platform.
+4. **Write decisions back.** Analyst Approve / Decline should land in Dodo's
+   real decision path, so memory learns from real calls.
+
+First honest test: do Dodo's actual decline reasons look like the stories this
+demo already catches?
+
 ## Run it
 
 ```bash
@@ -181,7 +197,7 @@ would be a remote-code-execution hole dressed up as a learning loop.
 ```
 riskmemory/
   config.py        assumed constants — every §6 number lives here and nowhere else
-  applications.py  inbound Dodo signup packets (demo inbox)
+  applications.py  inbound Dodo signup integration (demo inbox)
   corpus.py        deterministic synthetic population (seed 20260820)
   graph.py         context graph, entity resolution, corroborating-path search
   retrieval.py     hand-rolled TF-IDF + cosine, no numpy
