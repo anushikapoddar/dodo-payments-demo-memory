@@ -75,16 +75,18 @@ Dodo's true probability.
 
 ## Next steps
 
-Not a model to train. The next connection is Dodo's merchant records.
+The next step is integrating with Dodo's actual system.
 
-1. **Signup integration.** Take what the merchant already submitted at signup,
-   add product, and KYC, so an analyst does not retype it.
+1. **Signup integration.** Direct sync with the merchant's responses in the
+   product form.
 2. **Outcomes.** Who we approved, who we declined, and who later went bad.
-   That replaces the assumed 1.7% and the weights in `config.py`.
+   With those real endings, the assumed 1.7% and the weights in `config.py`
+   can be replaced with Dodo's numbers.
 3. **Live ops.** Disputes, prepaid balances, and payout changes for merchants
-   already on the platform.
-4. **Write decisions back.** Analyst Approve / Decline should land in Dodo's
-   real decision path, so memory learns from real calls.
+   already on the platform will update in the memory layer.
+4. **Write decisions back.** Human decisions made so far, and decisions going
+   forward, will be integrated. After we connect to the actual system, the
+   memory layer will update itself from those calls.
 
 First honest test: do Dodo's actual decline reasons look like the stories this
 demo already catches?
