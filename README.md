@@ -1,13 +1,63 @@
 # Merchant Risk Memory
 
-An anti-fragile AI memory layer for merchant intelligence and fraud detection at
-Dodo Payments. It continuously learns from new merchant data, builds a contextual
-memory graph, and refreshes risk assessments to uncover hidden patterns,
-relationships and emerging fraud signals.
+A decision engine for merchant risk at Dodo Payments (merchant of record).
+It **recommends**. A human **decides**. **Memory learns** from that decision.
 
-Working demo of the system described in the
-[problem statement, pipeline and console design](https://claude.ai/code/artifact/31f3b9ac-a375-4662-a191-6dab48fde813).
-Built as a demo for Dodo Payments — everything runs on synthetic data.
+Working demo on **synthetic data**. Not a production underwriting model.
+
+## How a decision works
+
+This is **not** a neural net trained on Dodo’s book. It is composed evidence,
+shown as a probability so the arithmetic is visible.
+
+**On every assessment**
+
+1. Take the merchant packet Dodo already collected (signup, product, ID country,
+   how they deliver). Import it — don’t retype it.
+2. Start from a **prior**: ~1.7% of approvals go bad.
+3. Multiply by **signals** — policy, geo, copy vs category, graph links to a
+   terminated merchant, local night hours, thin web, similar past cases, what
+   analysts already declined.
+4. That product is **P(bad)**. Open **Why this recommendation? → The calculation**
+   to see every multiplier.
+5. Recommend Approve / Review / Decline. The rationale you type is what memory
+   learns from.
+
+**Where 1.7% comes from**  
+It is the starting belief *before* we look at this merchant — not a rate the
+engine discovered. The demo assumes ~45 confirmed-bad merchants out of ~2,600
+approvals (problem statement §6.1). **Assumed, not measured.** If no signals
+fire, P(bad) stays ~1.7% (a clean SaaS). 84% means “starting from 1.7%, this
+stack of evidence got that strong.”
+
+**Assumed (in `config.py`, replace when Dodo has the real figure)**
+
+| Number | Role |
+|---|---|
+| 1.7% confirmed-bad among approvals | Prior |
+| Wrong approve costs ~6× a wrong decline | Operating point ~13.8% |
+| Each signal’s likelihood ratio | How hard a finding pushes the odds |
+
+**Actually computed**  
+Which signals fired, how they compose, who this applicant is linked to, whether
+we’ve seen this *shape* before.
+
+**What “learning” means**  
+Not gradient descent. Decline a gambling-shaped merchant → the next one in that
+vertical scores hotter. Unrelated SaaS does not. Too few labeled outcomes (~45)
+to train a classifier; that’s why the design is retrieval + graph + memory.
+
+**Verified vs not**
+
+| Verified | Not verified |
+|---|---|
+| Clean merchants stay near the prior | That 1.7% is Dodo’s real bad rate |
+| Planted cases fire (Lumen, Nightwell, services, geo) | That 84% ≈ true P(go bad) |
+| Memory heats the same vertical, not the whole book | Out-of-sample performance on the live book |
+| Named Dodo customers are never adverse precedent | Weights fit to historical outcomes |
+
+One line: *we can see the right things at signup, show our working, and learn
+from the analyst. We cannot yet say the percentage is Dodo’s true probability.*
 
 ## Run it
 
@@ -16,65 +66,33 @@ Built as a demo for Dodo Payments — everything runs on synthetic data.
 ```
 
 Opens <http://127.0.0.1:8765>. **No dependencies** — Python 3.11+ standard
-library only. No pip install, no npm, no build step, nothing to configure.
+library only. No pip install, no npm, no build step.
 
 ```bash
-python3 -m unittest discover -s tests -v     # 56 tests
+python3 -m unittest discover -s tests -q     # 82 tests
 ```
 
-New here? Read **[HANDOFF.md](HANDOFF.md)** first — it covers the problem, the
-four risk postures, the assumed numbers, and the constraints that matter.
+Longer context: **[HANDOFF.md](HANDOFF.md)**.
 
-## What it does
-
-Eight views, each mapping to a section of the problem statement:
+## What you’ll see
 
 | View | What it shows |
 |---|---|
-| **Overview** | Four figures, risk distribution cut at the operating point, portfolio exposure, recent evaluations, memory activity |
-| **Merchants** | The whole corpus, searchable and filterable, ranked by P(bad) |
-| **Evaluations** | One worklist — new applications and on-platform alerts together |
-| **Memory layer** | Every add / update / invalidate / no-op with provenance, plus the replay gate |
-| **Graph explorer** | The corroborating routes between a merchant and the rest of the portfolio |
-| **Alerts** | Post-approval lifecycle and drift, by risk posture |
-| **Chat** | Ask, tell or correct in plain text; every answer cites its sources |
-| **History** | Past conversations and what each one changed |
+| **Homepage** | Portfolio snapshot and **Assess a merchant** |
+| **Assessment history** | Session assessments and recorded decisions |
+| **Merchants** | The corpus, searchable, ranked by P(bad) |
+| **Memory layer** | Add / update / invalidate / no-op, plus the replay gate |
+| **Evaluations** | Queue and live alerts |
+| **Context graph** | Corroborating routes to merchants already judged |
+| **Alerts** | Post-approval lifecycle, by risk posture |
 
-### The demo path
+### Demo path
 
-1. **Review queue** → **Lumen Labs** (~93% P(bad)). Every field on the
-   application is clean. The case is carried entirely by three independent
-   graph routes to *Vellum Reader*, terminated in March. Decline it with a
-   rationale; watch memory reconcile the write.
-2. **Alerts** → four postures side by side. Two of them — a merchant *failing*
-   with $486k of prepaid service outstanding, and one *being attacked* via
-   payout redirection — are invisible to any fraud-detection framing.
-3. **Replay gate** → ingest **Quartz Habit** (deceptive billing). The system
-   distils a pattern, replays every historical decision with and without it,
-   and promotes it only because it catches **+3 more with no new false flags**.
-   That delta is what "anti-fragile" means as a number.
-
-## Talking to the memory layer
-
-The **Ask memory** view handles three things, routed by deterministic intent
-parsing rather than a model — an explanation of why a merchant was declined has
-to be reproducible and traceable, and a hallucinated one would make the whole
-audit trail worthless.
-
-- **Ask** — "Why is Lumen Labs risky?", "What do we know about ebook
-  catalogues?", "How are we doing overall?" Answers cite the signals, graph
-  paths, precedent cases and memories they used. Asking never writes.
-- **Tell** — "Merchants selling unlimited ebook libraries without publisher
-  licences are risky." This writes to memory *and immediately replays it over
-  past decisions*, so you see whether it catches more or just adds noise before
-  you trust it.
-- **Correct** — "Actually Marlow Type was fine." Recorded as a correction at
-  higher confidence, superseding rather than deleting what it contradicts.
-
-Human assertions skip the replay gate, because a founder saying so is the
-authority — but the historical impact is still shown, so a rule that would
-wrongly flag legitimate merchants is visible immediately rather than after it
-has done damage.
+1. **Assess a merchant** → **Import from Dodo** (the packet they already submitted).
+2. **Westbrook AP Live** — IN entity, live EST classes. Flagged at signup, no volume yet.
+3. **Nightwell Academy** — same idea after they’re live; night is **IST**, not UTC.
+4. **Lumen Labs** — every field looks clean; the graph still reaches a terminated merchant. Decline with a rationale; memory learns.
+5. **Quill Harbor** — they ticked Services. Policy hard-decline.
 
 ## Dodo brand and real customers
 
@@ -148,21 +166,21 @@ would be a remote-code-execution hole dressed up as a learning loop.
 
 ```
 riskmemory/
-  config.py     assumed constants — every §6 number lives here and nowhere else
-  corpus.py     deterministic synthetic population (seed 20260820)
-  graph.py      context graph, entity resolution, corroborating-path search
-  retrieval.py  hand-rolled TF-IDF + cosine, no numpy
-  memory.py     add/update/invalidate/no-op lifecycle, provenance, predicates
-  signals.py    detectors, one family per posture
-  decision.py   likelihood ratios in odds space against the 13.8% threshold
-  converse.py   intent parsing and evidence-cited answers
-  monitor.py    lifecycle alerts and drift reconciliation
-  replay.py     distillation and the replay gate
-  app.py        application state
-  server.py     stdlib HTTP server
-web/            vanilla JS console, no framework
-tests/          56 tests
-docs/           the three source documents + the merged artifact
+  config.py        assumed constants — every §6 number lives here and nowhere else
+  applications.py  inbound Dodo signup packets (demo inbox)
+  corpus.py        deterministic synthetic population (seed 20260820)
+  graph.py         context graph, entity resolution, corroborating-path search
+  retrieval.py     hand-rolled TF-IDF + cosine, no numpy
+  memory.py        add/update/invalidate/no-op lifecycle, provenance, predicates
+  signals.py       detectors, one family per posture
+  decision.py      likelihood ratios in odds space against the 13.8% threshold
+  monitor.py       lifecycle alerts and drift reconciliation
+  replay.py        distillation and the replay gate
+  app.py           application state
+  server.py        stdlib HTTP server
+web/               vanilla JS console, no framework
+tests/             82 tests
+docs/              the three source documents + the merged artifact
 ```
 
 ## Every number here is assumed
