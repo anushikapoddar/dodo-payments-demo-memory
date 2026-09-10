@@ -750,7 +750,7 @@ class App:
 
         recent = []
         for m in sorted((x for x in self.merchants if x.decided_at),
-                        key=lambda x: x.decided_at, reverse=True)[:6]:
+                        key=lambda x: x.decided_at, reverse=True)[:3]:
             s = scored.get(m.id, self._score(m) if m.status == "pending" else 0.0)
             if m.status == "pending":
                 band = next(n for n, lo, hi, _t in self.RISK_BANDS if lo <= s < hi)

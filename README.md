@@ -1,75 +1,77 @@
 # Merchant Risk Memory
 
-Dodo is the merchant of record: if we onboard a bad merchant, the risk is ours.
+Dodo is the merchant of record. If we onboard a bad merchant, the risk is ours.
 This demo is a **risk memory** for that problem.
 
 The system **recommends**. A person **decides**. What they write down is what
 **memory learns** from.
 
-It runs on **made-up merchants** so we can show the loop. It is not Dodo’s live
-underwriting model.
+It runs on **invented merchants** so we can show the loop. It is not live on
+Dodo's data.
 
 ## How a decision works
 
-There is no neural net in the back that “trained on Dodo.” What you see as a
-percentage is **evidence stacked on a starting guess**, with the working shown.
+There is no neural network in the background. Nothing here is trained on Dodo.
+The percentage you see is **evidence stacked on a starting guess**, and you
+can open the working.
 
 **When you assess someone**
 
-1. Pull in what they already gave Dodo — signup, product, country on their ID,
+1. Pull in what they already gave Dodo: signup, product, country on their ID,
    how they deliver access. You should not have to type that again.
 2. Start from a simple fact: **most approvals are fine.** In this demo we treat
-   that as “about 1.7% of approvals later go bad.”
-3. Then look for things that would change your mind: they ticked a category we
-   don’t support, their copy doesn’t match the form, they’re linked to someone
-   we already terminated, their “campus” product sells at night in *their*
-   timezone, the open web is empty, we’ve declined someone who looks like this.
+   that as "about 1.7% of approvals later go bad."
+3. Then look for things that would change your mind: they picked a category we
+   do not support, their copy does not match the form, they are linked to
+   someone we already terminated, their campus product sells at night in
+   *their* timezone, the open web is empty, we have declined someone who looks
+   like this.
 4. Those findings push the 1.7% up or leave it alone. The result is the
    **chance of going bad** on the card. If you want the working, open
-   **Why this recommendation? → The calculation**.
+   **Why this recommendation?** and then **The calculation**.
 5. The system says Approve, Review, or Decline. **You** still decide, and the
    two lines you type are what it remembers.
 
 **About that 1.7%**  
 It is a **starting point**, not a number the engine discovered. We assumed
-roughly 45 merchants later confirmed bad, out of about 2,600 approvals — a
-plausible book for a demo, not a figure from Dodo’s warehouse. If nothing
+roughly 45 merchants later confirmed bad, out of about 2,600 approvals. That
+is a plausible book for a demo, not a figure from Dodo's warehouse. If nothing
 suspicious fires, the score stays near 1.7% (ordinary SaaS). If you see 84%,
-read it as: “we started at 1.7%, and the evidence got very strong.”
+read it as: we started at 1.7%, and the evidence got very strong.
 
 **What we made up vs what the computer actually does**
 
-We made up the 1.7%, the idea that a wrong approval costs about six times a
-wrong decline (that’s how we get a ~13.8% “think hard” line), and how heavy
-each finding is. Those live in `config.py` so a real Dodo number can replace
-them.
+We made up the 1.7%. We made up the idea that a wrong approval costs about
+six times a wrong decline (that is how we get a roughly 13.8% "think hard"
+line). We also made up how heavy each finding is. Those live in `config.py`
+so a real Dodo number can replace them.
 
 The computer works out **which findings fired**, **how they stack**, **who this
-applicant is connected to**, and **whether we’ve seen this kind of merchant
+applicant is connected to**, and **whether we have seen this kind of merchant
 before**.
 
-**What “it learns” means**  
-If you decline someone for looking like a casino, the *next* casino-shaped
-applicant should come in hotter. A furniture SaaS should not. That is memory —
-not the system retraining itself overnight. We only assumed ~45 known-bad
-merchants, which is too few to train a classifier, so we retrieve, we graph,
-and we remember decisions instead.
+**What "it learns" means**  
+If you decline someone for looking like a casino, the next applicant who looks
+like a casino should come in hotter. A furniture SaaS should not. That is
+memory, not the system retraining itself overnight. We only assumed about 45
+merchants known to be bad, which is too few to train a classifier, so we
+retrieve, we graph, and we remember decisions instead.
 
 **What we have checked, and what we have not**
 
 We have checked that quiet merchants stay quiet, that the stories we planted
 (Lumen, Nightwell, services, the wrong country) actually fire, that a decline
-doesn’t punish the whole book, and that real named Dodo customers are never
-used as “see, this went badly.”
+does not punish the whole book, and that real named Dodo customers are never
+used as "see, this went badly."
 
-We have **not** checked that 1.7% is Dodo’s real rate, or that 84% is the true
+We have **not** checked that 1.7% is Dodo's real rate, or that 84% is the true
 chance this merchant fails. That would take old applications with known
 endings. Until then, treat the percentage as **how strong the evidence is**,
 not a forecast from the live book.
 
 In one sentence: we can notice the right things at signup, show our working,
 and get better when an analyst decides. We cannot yet say the percentage is
-Dodo’s true probability.
+Dodo's true probability.
 
 ## Run it
 
@@ -77,8 +79,8 @@ Dodo’s true probability.
 ./run.sh
 ```
 
-Opens <http://127.0.0.1:8765>. **No dependencies** — Python 3.11+ standard
-library only. No pip install, no npm, no build step.
+Opens <http://127.0.0.1:8765>. **No extra installs.** Python 3.11+ standard
+library only. No pip, no npm, no build step.
 
 ```bash
 python3 -m unittest discover -s tests -q     # 82 tests
@@ -100,11 +102,11 @@ Longer context: **[HANDOFF.md](HANDOFF.md)**.
 
 ### Try it in this order
 
-1. **Assess a merchant** → **Import from Dodo** — this is the form they already filled.
-2. **Westbrook AP Live** — an Indian entity running live classes at 8pm Eastern. Caught at signup, before any money moves.
-3. **Nightwell Academy** — the same idea once they’re live. “Night” means night **in India**, not on a UTC clock.
-4. **Lumen Labs** — the form looks fine. The graph still ties them to someone we already terminated. Decline them and write why; that’s the learning step.
-5. **Quill Harbor** — they picked Services on the form. We don’t take that. Decline.
+1. **Assess a merchant**, then **Import from Dodo**. This is the form they already filled.
+2. **Westbrook AP Live**. An Indian entity running live classes at 8pm Eastern. Caught at signup, before any money moves.
+3. **Nightwell Academy**. The same idea once they are live. "Night" means night **in India**, not on a UTC clock.
+4. **Lumen Labs**. The form looks fine. The graph still ties them to someone we already terminated. Decline them and write why. That is the learning step.
+5. **Quill Harbor**. They picked Services on the form. We do not take that. Decline.
 
 ## Dodo brand and real customers
 

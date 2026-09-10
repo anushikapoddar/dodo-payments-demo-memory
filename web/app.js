@@ -288,7 +288,6 @@ function donut(dist, total) {
 async function viewHomepage() {
   const [o, p] = await Promise.all([api('/api/overview'), api('/api/portfolio')]);
   state.portfolio = p; renderNav();
-  const v = p.vamp;
 
   return head(`${greeting()}, Anushika`,
     'Portfolio risk, recent evaluations, and the live book.',
@@ -307,9 +306,6 @@ async function viewHomepage() {
     <div>
       <div class="card"><h3>Portfolio exposure</h3>
         <div class="rows">
-          <div class="rowitem" style="cursor:default"><div class="sq" style="background:var(--accent-bg);color:var(--accent)">${svg('chart')}</div>
-            <div class="nm">VAMP dispute ratio<span>Acquirer above-standard at ${pct(v.above_standard, 2)}</span></div>
-            <span class="chip ${v.ratio >= v.above_standard ? 'c-bad' : v.ratio >= v.above_standard * 0.8 ? 'c-warn' : 'c-ok'}">${pct(v.ratio, 3)}</span></div>
           <div class="rowitem" style="cursor:default"><div class="sq" style="background:var(--ok-bg);color:var(--ok)">${svg('bolt')}</div>
             <div class="nm">Annualised volume<span>${p.approved.toLocaleString()} approved merchants</span></div>
             <span class="chip c-mute">${usd(p.annual_volume)}</span></div>
@@ -344,7 +340,7 @@ function dirTable(d, compact) {
   return `<div class="scroll"><table>
     <thead><tr><th>Merchant</th><th>Category</th><th>Risk level</th>
       <th class="num">Memory score</th><th class="num">Monthly volume</th>
-      <th>Last evaluated</th></tr></thead>
+      ${compact ? '' : '<th>Last evaluated</th>'}</tr></thead>
     <tbody>${d.rows.map((r) => `<tr class="click" data-id="${esc(r.id)}">
       <td><b>${esc(r.name)}</b>${r.real ? ' <span class="real">DODO</span>' : ''}
         <div class="tiny muted mono">${esc(r.domain)} &middot; ${esc(r.country)}</div></td>
@@ -352,7 +348,7 @@ function dirTable(d, compact) {
       <td><span class="chip c-${r.tone}">${esc(r.band)}</span></td>
       <td class="num"><b>${r.score}</b><span class="muted tiny">/100</span></td>
       <td class="num">${r.volume ? money(r.volume) : '<span class="muted">not live</span>'}</td>
-      <td class="tiny muted">${esc(r.last || '—')}</td>
+      ${compact ? '' : `<td class="tiny muted">${esc(r.last || '—')}</td>`}
     </tr>`).join('')}</tbody></table></div>${compact ? '' : pager(d)}`;
 }
 
@@ -1170,7 +1166,8 @@ async function render() {
   const main = $('#main');
   main.innerHTML = '<div class="page"><div class="empty"><span class="spinner"></span>Loading…</div></div>';
   try {
-    main.innerHTML = '<div class="page">' + (state.briefId
+    const home = !state.briefId && state.view === 'homepage';
+    main.innerHTML = `<div class="page${home ? ' homepage' : ''}">` + (state.briefId
       ? await viewBrief(state.briefId)
       : await RENDER[state.view]()) + '</div>';
   } catch (e) {
@@ -1188,7 +1185,7 @@ async function render() {
 async function loadDirMount() {
   const mount = $('#dirmount');
   try {
-    mount.innerHTML = dirTable(await api(dirQuery(6, 0)), true);
+    mount.innerHTML = dirTable(await api(dirQuery(3, 0)), true);
     mount.querySelectorAll('tr.click').forEach((tr) =>
       tr.onclick = () => { state.briefId = tr.dataset.id; render(); });
   } catch { mount.innerHTML = '<div class="empty">Directory unavailable.</div>'; }
