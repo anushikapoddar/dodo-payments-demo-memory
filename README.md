@@ -1,63 +1,75 @@
 # Merchant Risk Memory
 
-A decision engine for merchant risk at Dodo Payments (merchant of record).
-It **recommends**. A human **decides**. **Memory learns** from that decision.
+Dodo is the merchant of record: if we onboard a bad merchant, the risk is ours.
+This demo is a **risk memory** for that problem.
 
-Working demo on **synthetic data**. Not a production underwriting model.
+The system **recommends**. A person **decides**. What they write down is what
+**memory learns** from.
+
+It runs on **made-up merchants** so we can show the loop. It is not Dodo’s live
+underwriting model.
 
 ## How a decision works
 
-This is **not** a neural net trained on Dodo’s book. It is composed evidence,
-shown as a probability so the arithmetic is visible.
+There is no neural net in the back that “trained on Dodo.” What you see as a
+percentage is **evidence stacked on a starting guess**, with the working shown.
 
-**On every assessment**
+**When you assess someone**
 
-1. Take the merchant packet Dodo already collected (signup, product, ID country,
-   how they deliver). Import it — don’t retype it.
-2. Start from a **prior**: ~1.7% of approvals go bad.
-3. Multiply by **signals** — policy, geo, copy vs category, graph links to a
-   terminated merchant, local night hours, thin web, similar past cases, what
-   analysts already declined.
-4. That product is **P(bad)**. Open **Why this recommendation? → The calculation**
-   to see every multiplier.
-5. Recommend Approve / Review / Decline. The rationale you type is what memory
-   learns from.
+1. Pull in what they already gave Dodo — signup, product, country on their ID,
+   how they deliver access. You should not have to type that again.
+2. Start from a simple fact: **most approvals are fine.** In this demo we treat
+   that as “about 1.7% of approvals later go bad.”
+3. Then look for things that would change your mind: they ticked a category we
+   don’t support, their copy doesn’t match the form, they’re linked to someone
+   we already terminated, their “campus” product sells at night in *their*
+   timezone, the open web is empty, we’ve declined someone who looks like this.
+4. Those findings push the 1.7% up or leave it alone. The result is the
+   **chance of going bad** on the card. If you want the working, open
+   **Why this recommendation? → The calculation**.
+5. The system says Approve, Review, or Decline. **You** still decide, and the
+   two lines you type are what it remembers.
 
-**Where 1.7% comes from**  
-It is the starting belief *before* we look at this merchant — not a rate the
-engine discovered. The demo assumes ~45 confirmed-bad merchants out of ~2,600
-approvals (problem statement §6.1). **Assumed, not measured.** If no signals
-fire, P(bad) stays ~1.7% (a clean SaaS). 84% means “starting from 1.7%, this
-stack of evidence got that strong.”
+**About that 1.7%**  
+It is a **starting point**, not a number the engine discovered. We assumed
+roughly 45 merchants later confirmed bad, out of about 2,600 approvals — a
+plausible book for a demo, not a figure from Dodo’s warehouse. If nothing
+suspicious fires, the score stays near 1.7% (ordinary SaaS). If you see 84%,
+read it as: “we started at 1.7%, and the evidence got very strong.”
 
-**Assumed (in `config.py`, replace when Dodo has the real figure)**
+**What we made up vs what the computer actually does**
 
-| Number | Role |
-|---|---|
-| 1.7% confirmed-bad among approvals | Prior |
-| Wrong approve costs ~6× a wrong decline | Operating point ~13.8% |
-| Each signal’s likelihood ratio | How hard a finding pushes the odds |
+We made up the 1.7%, the idea that a wrong approval costs about six times a
+wrong decline (that’s how we get a ~13.8% “think hard” line), and how heavy
+each finding is. Those live in `config.py` so a real Dodo number can replace
+them.
 
-**Actually computed**  
-Which signals fired, how they compose, who this applicant is linked to, whether
-we’ve seen this *shape* before.
+The computer works out **which findings fired**, **how they stack**, **who this
+applicant is connected to**, and **whether we’ve seen this kind of merchant
+before**.
 
-**What “learning” means**  
-Not gradient descent. Decline a gambling-shaped merchant → the next one in that
-vertical scores hotter. Unrelated SaaS does not. Too few labeled outcomes (~45)
-to train a classifier; that’s why the design is retrieval + graph + memory.
+**What “it learns” means**  
+If you decline someone for looking like a casino, the *next* casino-shaped
+applicant should come in hotter. A furniture SaaS should not. That is memory —
+not the system retraining itself overnight. We only assumed ~45 known-bad
+merchants, which is too few to train a classifier, so we retrieve, we graph,
+and we remember decisions instead.
 
-**Verified vs not**
+**What we have checked, and what we have not**
 
-| Verified | Not verified |
-|---|---|
-| Clean merchants stay near the prior | That 1.7% is Dodo’s real bad rate |
-| Planted cases fire (Lumen, Nightwell, services, geo) | That 84% ≈ true P(go bad) |
-| Memory heats the same vertical, not the whole book | Out-of-sample performance on the live book |
-| Named Dodo customers are never adverse precedent | Weights fit to historical outcomes |
+We have checked that quiet merchants stay quiet, that the stories we planted
+(Lumen, Nightwell, services, the wrong country) actually fire, that a decline
+doesn’t punish the whole book, and that real named Dodo customers are never
+used as “see, this went badly.”
 
-One line: *we can see the right things at signup, show our working, and learn
-from the analyst. We cannot yet say the percentage is Dodo’s true probability.*
+We have **not** checked that 1.7% is Dodo’s real rate, or that 84% is the true
+chance this merchant fails. That would take old applications with known
+endings. Until then, treat the percentage as **how strong the evidence is**,
+not a forecast from the live book.
+
+In one sentence: we can notice the right things at signup, show our working,
+and get better when an analyst decides. We cannot yet say the percentage is
+Dodo’s true probability.
 
 ## Run it
 
@@ -86,13 +98,13 @@ Longer context: **[HANDOFF.md](HANDOFF.md)**.
 | **Context graph** | Corroborating routes to merchants already judged |
 | **Alerts** | Post-approval lifecycle, by risk posture |
 
-### Demo path
+### Try it in this order
 
-1. **Assess a merchant** → **Import from Dodo** (the packet they already submitted).
-2. **Westbrook AP Live** — IN entity, live EST classes. Flagged at signup, no volume yet.
-3. **Nightwell Academy** — same idea after they’re live; night is **IST**, not UTC.
-4. **Lumen Labs** — every field looks clean; the graph still reaches a terminated merchant. Decline with a rationale; memory learns.
-5. **Quill Harbor** — they ticked Services. Policy hard-decline.
+1. **Assess a merchant** → **Import from Dodo** — this is the form they already filled.
+2. **Westbrook AP Live** — an Indian entity running live classes at 8pm Eastern. Caught at signup, before any money moves.
+3. **Nightwell Academy** — the same idea once they’re live. “Night” means night **in India**, not on a UTC clock.
+4. **Lumen Labs** — the form looks fine. The graph still ties them to someone we already terminated. Decline them and write why; that’s the learning step.
+5. **Quill Harbor** — they picked Services on the form. We don’t take that. Decline.
 
 ## Dodo brand and real customers
 
