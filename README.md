@@ -88,9 +88,6 @@ The next step is integrating with Dodo's actual system.
    forward, will be integrated. After we connect to the actual system, the
    memory layer will update itself from those calls.
 
-First honest test: do Dodo's actual decline reasons look like the stories this
-demo already catches?
-
 ## Run it
 
 ```bash
