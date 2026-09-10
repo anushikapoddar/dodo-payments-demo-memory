@@ -1,0 +1,12 @@
+.git
+.demo
+.env
+.env.local
+.venv
+venv
+__pycache__
+*.pyc
+.DS_Store
+docs
+tests
+HANDOFF.md

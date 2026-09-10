@@ -172,9 +172,11 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) 
 
 if __name__ == "__main__":
     import argparse
+    import os
     ap = argparse.ArgumentParser(description="Merchant Risk Memory demo server")
-    ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8765")))
+    ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
-    serve(a.host, a.port, not a.no_browser)
+    public = a.host not in ("127.0.0.1", "localhost")
+    serve(a.host, a.port, not a.no_browser and not public)

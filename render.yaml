@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: dodo-memory
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: HOST
+        value: "0.0.0.0"
