@@ -77,14 +77,14 @@ Dodo's true probability.
 
 The next step is integrating with Dodo's actual system.
 
-1. **Signup integration.** Direct sync with the merchant's responses in the
+1. **Signup integration:** Direct sync with the merchant's responses in the
    product form.
-2. **Outcomes.** Who we approved, who we declined, and who later went bad.
+2. **Outcomes:** Who we approved, who we declined, and who later went bad.
    With those real endings, the assumed 1.7% and the weights in `config.py`
    can be replaced with Dodo's numbers.
-3. **Live ops.** Disputes, prepaid balances, and payout changes for merchants
+3. **Live ops:** Disputes, prepaid balances, and payout changes for merchants
    already on the platform will update in the memory layer.
-4. **Write decisions back.** Human decisions made so far, and decisions going
+4. **Write decisions back:** Human decisions made so far, and decisions going
    forward, will be integrated. After we connect to the actual system, the
    memory layer will update itself from those calls.
 
