@@ -90,6 +90,10 @@ The next step is integrating with Dodo's actual system.
 
 ## Run it
 
+Live demo: <https://demomemory.anushika.space>
+
+On your laptop:
+
 ```bash
 ./run.sh
 ```
